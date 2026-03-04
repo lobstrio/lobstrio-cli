@@ -10,8 +10,8 @@ whoami_app = typer.Typer()
 
 
 @config_app.command("set-token")
-def set_token(token: str = typer.Argument(..., help="Your Lobstr API token")):
-    """Store your API token."""
+def set_token(token: str = typer.Argument(..., help="Your Lobstr API token (get it at https://app.lobstr.io/dashboard/api)")):
+    """Store your API token. Get your token at https://app.lobstr.io/dashboard/api"""
     save_token(token)
     print_success(f"Token saved to {get_config_path()}")
 

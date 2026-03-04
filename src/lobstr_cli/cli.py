@@ -23,7 +23,7 @@ def get_client() -> LobstrClient:
     if "client" not in _state:
         token = get_token(override=_state.get("token"))
         if not token:
-            print_error("No API token. Run: lobstr config set-token <TOKEN>")
+            print_error("No API token. Run: lobstr config set-token <TOKEN>\n  Get your token at https://app.lobstr.io/dashboard/api")
             raise typer.Exit(1)
         _state["client"] = LobstrClient(token=token, verbose=_state.get("verbose", False))
     return _state["client"]

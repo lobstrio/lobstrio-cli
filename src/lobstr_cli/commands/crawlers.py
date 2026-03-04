@@ -27,10 +27,13 @@ def list_crawlers():
             status = "[red]unavailable[/]"
         elif c.get("is_premium"):
             status = "[cyan]premium[/]"
+        cpr = c.get("credits_per_row", "?")
+        if isinstance(cpr, dict):
+            cpr = cpr.get("current", cpr.get("legacy", "?"))
         rows.append([
             c.get("name", ""),
             c.get("id", "")[:12],
-            f"{c.get('credits_per_row', '?')}",
+            str(cpr),
             str(c.get("max_concurrency", "")),
             "yes" if c.get("account") else "no",
             status,
@@ -108,5 +111,8 @@ def search_crawlers(keyword: str = typer.Argument(..., help="Search keyword")):
         return
     rows = []
     for c in matches:
-        rows.append([c.get("name", ""), c.get("id", "")[:12], str(c.get("credits_per_row", "?"))])
+        cpr = c.get("credits_per_row", "?")
+        if isinstance(cpr, dict):
+            cpr = cpr.get("current", cpr.get("legacy", "?"))
+        rows.append([c.get("name", ""), c.get("id", "")[:12], str(cpr)])
     print_table(["Name", "Hash", "Credits/Row"], rows)
