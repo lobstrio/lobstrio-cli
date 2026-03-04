@@ -63,3 +63,9 @@ app.add_typer(task_app, name="task", help="Task (input URL) management")
 
 from lobstr_cli.commands.run import run_app
 app.add_typer(run_app, name="run", help="Run lifecycle management")
+
+from lobstr_cli.commands.go import go_app
+app.registered_commands.extend(go_app.registered_commands)
+
+from lobstr_cli.commands.results import results_app
+app.add_typer(results_app, name="results", help="Result fetching")
