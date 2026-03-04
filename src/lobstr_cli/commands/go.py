@@ -13,6 +13,16 @@ from lobstr_cli.display import (
 go_app = typer.Typer()
 
 
+def _find_squid_by_name(client, name: str, crawler_id: str) -> dict | None:
+    """Find an existing squid by name and crawler."""
+    data = client.get("/squids", params={"name": name})
+    items = data.get("data", [])
+    for s in items:
+        if s.get("name") == name and s.get("crawler") == crawler_id:
+            return s
+    return None
+
+
 @go_app.command("go")
 def go(
     crawler: str = typer.Argument(..., help="Crawler name or hash"),
@@ -24,6 +34,8 @@ def go(
     output: str = typer.Option("results.csv", "--output", "-o", help="Output file path"),
     no_download: bool = typer.Option(False, "--no-download", help="Start run without waiting"),
     name: Optional[str] = typer.Option(None, "--name", help="Custom squid name"),
+    delete: bool = typer.Option(False, "--delete", help="Delete squid after completion"),
+    empty: bool = typer.Option(False, "--empty", help="Empty old tasks before adding new ones (when reusing squid)"),
 ):
     """Full workflow: create squid, add tasks, run, download."""
     from lobstr_cli.cli import get_client, _state
@@ -52,15 +64,25 @@ def go(
 
     squid_id = None
     run_id = None
+    created_new_squid = False
     try:
-        # 3. Create squid
-        print_info(f"Creating squid ({len(task_inputs)} tasks)...")
-        body: dict = {"crawler": crawler_id}
-        if name:
-            body["name"] = name
-        squid = client.post("/squids", json=body)
-        squid_id = squid["id"]
-        print_info(f"Squid: {squid.get('name')} ({squid_id[:12]})")
+        # 3. Find existing or create squid
+        existing = _find_squid_by_name(client, name, crawler_id) if name else None
+        if existing:
+            squid_id = existing["id"]
+            print_info(f"Reusing squid: {existing.get('name')} ({squid_id[:12]})")
+            if empty:
+                client.post(f"/squids/{squid_id}/empty", json={"type": "url"})
+                print_info("Emptied old tasks")
+        else:
+            print_info(f"Creating squid ({len(task_inputs)} tasks)...")
+            body: dict = {"crawler": crawler_id}
+            if name:
+                body["name"] = name
+            squid = client.post("/squids", json=body)
+            squid_id = squid["id"]
+            created_new_squid = True
+            print_info(f"Squid: {squid.get('name')} ({squid_id[:12]})")
 
         # 4. Update squid params if needed
         update_body: dict = {}
@@ -114,33 +136,37 @@ def go(
         final = client.get(f"/runs/{run_id}")
         if _state.get("json"):
             print_json(final)
-            return
-
-        s3_url = ""
-        for attempt in range(5):
-            try:
-                dl = client.get(f"/runs/{run_id}/download")
-                s3_url = dl.get("s3", "")
-                if s3_url:
-                    break
-            except Exception:
-                pass
-            if attempt == 0:
-                print_info("Waiting for export...")
-            time.sleep(5)
-
-        if s3_url:
-            client.download(s3_url, output)
-            print_success(f"Downloaded {final.get('total_results', '?')} results to {output}")
         else:
-            print_info("Export not ready. Try: lobstr run download " + run_id)
+            s3_url = ""
+            for attempt in range(5):
+                try:
+                    dl = client.get(f"/runs/{run_id}/download")
+                    s3_url = dl.get("s3", "")
+                    if s3_url:
+                        break
+                except Exception:
+                    pass
+                if attempt == 0:
+                    print_info("Waiting for export...")
+                time.sleep(5)
 
-        print_detail([
-            ("Status", final.get("status")),
-            ("Results", final.get("total_results")),
-            ("Duration", final.get("duration")),
-            ("Credits", final.get("credit_used")),
-        ])
+            if s3_url:
+                client.download(s3_url, output)
+                print_success(f"Downloaded {final.get('total_results', '?')} results to {output}")
+            else:
+                print_info("Export not ready. Try: lobstr run download " + run_id)
+
+            print_detail([
+                ("Status", final.get("status")),
+                ("Results", final.get("total_results")),
+                ("Duration", final.get("duration")),
+                ("Credits", final.get("credit_used")),
+            ])
+
+        # 9. Delete squid if requested
+        if delete:
+            client.delete(f"/squids/{squid_id}")
+            print_info(f"Deleted squid {squid_id[:12]}")
 
     except KeyboardInterrupt:
         msg = "\nInterrupted."
@@ -151,7 +177,7 @@ def go(
         print_info(msg)
         raise typer.Exit(0)
     except Exception:
-        if squid_id and not run_id:
+        if created_new_squid and squid_id and not run_id:
             # Clean up orphaned squid if error before run started
             try:
                 client.delete(f"/squids/{squid_id}")
