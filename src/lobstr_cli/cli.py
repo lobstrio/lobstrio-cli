@@ -12,6 +12,7 @@ app = typer.Typer(
     name="lobstr",
     help="CLI for the Lobstr.io scraping API",
     no_args_is_help=True,
+    pretty_exceptions_enable=False,
 )
 
 # Shared state
@@ -29,17 +30,20 @@ def get_client() -> LobstrClient:
     return _state["client"]
 
 
+def _version_callback(value: bool):
+    if value:
+        typer.echo(f"lobstr {__version__}")
+        raise typer.Exit()
+
+
 @app.callback()
 def main(
     json: bool = typer.Option(False, "--json", help="Output raw JSON"),
     token: Optional[str] = typer.Option(None, "--token", envvar="LOBSTR_TOKEN", help="Override API token"),
     verbose: bool = typer.Option(False, "--verbose", help="Show request/response details"),
     quiet: bool = typer.Option(False, "--quiet", help="Suppress non-essential output"),
-    version: bool = typer.Option(False, "--version", help="Show version"),
+    version: bool = typer.Option(False, "--version", help="Show version", callback=_version_callback, is_eager=True),
 ):
-    if version:
-        typer.echo(f"lobstr {__version__}")
-        raise typer.Exit()
     _state["json"] = json
     _state["token"] = token
     _state["verbose"] = verbose

@@ -90,7 +90,10 @@ def crawler_params(crawler: str = typer.Argument(..., help="Crawler hash or pref
         print_info("\nOptional functions (extra credits):")
         rows = []
         for name, spec in funcs.items():
-            rows.append([name, str(spec.get("credits_per_function", "")), str(spec.get("default", ""))])
+            cpf = spec.get("credits_per_function", "")
+            if isinstance(cpf, dict):
+                cpf = cpf.get("current", cpf.get("legacy", ""))
+            rows.append([name, str(cpf), str(spec.get("default", ""))])
         print_table(["Function", "Credits", "Default"], rows)
 
 

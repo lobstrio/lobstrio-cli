@@ -46,15 +46,21 @@ class LobstrClient:
         except Exception:
             pass
 
-        if resp.status_code == 401:
-            raise AuthError(401, body.get("error", "Authentication failed"), body)
-        if resp.status_code == 404:
-            raise NotFoundError(404, body.get("error", "Not found"), body)
-        if resp.status_code == 429:
-            retry_after = resp.headers.get("retry-after", "?")
-            raise RateLimitError(429, f"Rate limited. Retry after {retry_after}s", body)
         if resp.status_code >= 400:
-            raise APIError(resp.status_code, body.get("error", resp.text), body)
+            # API returns errors in different shapes
+            msg = (
+                body.get("error")
+                or (body.get("errors", {}).get("message") if isinstance(body.get("errors"), dict) else None)
+                or resp.text
+            )
+            if resp.status_code == 401:
+                raise AuthError(401, msg or "Authentication failed", body)
+            if resp.status_code == 404:
+                raise NotFoundError(404, msg or "Not found", body)
+            if resp.status_code == 429:
+                retry_after = resp.headers.get("retry-after", "?")
+                raise RateLimitError(429, f"Rate limited. Retry after {retry_after}s", body)
+            raise APIError(resp.status_code, msg, body)
 
         return body
 
