@@ -57,3 +57,6 @@ app.add_typer(crawlers_app, name="crawlers", help="Browse and search crawlers")
 
 from lobstr_cli.commands.squid import squid_app
 app.add_typer(squid_app, name="squid", help="Squid management")
+
+from lobstr_cli.commands.task import task_app
+app.add_typer(task_app, name="task", help="Task (input URL) management")
