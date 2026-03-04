@@ -51,3 +51,6 @@ def main(
 from lobstr_cli.commands.auth import config_app, whoami_app
 app.add_typer(config_app, name="config", help="Configuration management")
 app.registered_commands.extend(whoami_app.registered_commands)
+
+from lobstr_cli.commands.crawlers import crawlers_app
+app.add_typer(crawlers_app, name="crawlers", help="Browse and search crawlers")
