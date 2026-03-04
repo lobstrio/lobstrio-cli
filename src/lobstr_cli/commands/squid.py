@@ -3,18 +3,10 @@ from __future__ import annotations
 from typing import Optional
 import typer
 
-from lobstr_cli.config import resolve_alias
 from lobstr_cli.display import print_json, print_table, print_detail, print_success, print_error
+from lobstr_cli.resolve import resolve_squid as _resolve_squid
 
 squid_app = typer.Typer(no_args_is_help=True)
-
-
-def _resolve_squid(client, identifier: str) -> str:
-    identifier = resolve_alias(identifier)
-    all_squids = client.get("/squids")
-    items = all_squids.get("data", [])
-    from lobstr_cli.resolve import match_hash_prefix
-    return match_hash_prefix(identifier, items)
 
 
 @squid_app.command("create")

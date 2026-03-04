@@ -1,13 +1,11 @@
 from __future__ import annotations
 
 import json as json_mod
-import sys
 from typing import Any
 
 from rich.console import Console
 from rich.table import Table
 from rich.progress import Progress, SpinnerColumn, BarColumn, TextColumn, TimeElapsedColumn
-from rich import print as rprint
 
 console = Console()
 err_console = Console(stderr=True)

@@ -4,8 +4,8 @@ import json
 from typing import Optional
 import typer
 
-from lobstr_cli.config import resolve_alias
 from lobstr_cli.display import print_json, print_table, print_info
+from lobstr_cli.resolve import resolve_squid
 
 results_app = typer.Typer(no_args_is_help=True)
 
@@ -21,12 +21,7 @@ def get_results(
     """Fetch results for a squid."""
     from lobstr_cli.cli import get_client, _state
     client = get_client()
-    squid = resolve_alias(squid)
-    # Resolve squid
-    all_squids = client.get("/squids")
-    items = all_squids.get("data", [])
-    from lobstr_cli.resolve import match_hash_prefix
-    squid_id = match_hash_prefix(squid, items)
+    squid_id = resolve_squid(client, squid)
 
     data = client.get("/results", params={"squid": squid_id, "page": page, "page_size": page_size})
 

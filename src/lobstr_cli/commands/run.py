@@ -1,25 +1,16 @@
 from __future__ import annotations
 
 import time
-from pathlib import Path
 from typing import Optional
 import typer
 
-from lobstr_cli.config import resolve_alias
 from lobstr_cli.display import (
     print_json, print_table, print_detail, print_success,
-    print_info, print_error, make_progress, err_console,
+    print_info, print_error, make_progress,
 )
+from lobstr_cli.resolve import resolve_squid as _resolve_squid
 
 run_app = typer.Typer(no_args_is_help=True)
-
-
-def _resolve_squid(client, identifier: str) -> str:
-    identifier = resolve_alias(identifier)
-    all_squids = client.get("/squids")
-    items = all_squids.get("data", [])
-    from lobstr_cli.resolve import match_hash_prefix
-    return match_hash_prefix(identifier, items)
 
 
 def _poll_run(client, run_id: str, download_path: str | None = None) -> dict:

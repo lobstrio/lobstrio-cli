@@ -23,7 +23,7 @@ dev = [
 ]
 
 [project.scripts]
-lobstr = "lobstr_cli.cli:app"
+lobstr = "lobstr_cli.__main__:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/lobstr_cli"]

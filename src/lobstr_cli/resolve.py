@@ -1,21 +1,30 @@
 from __future__ import annotations
 
-import sys
 from lobstr_cli.display import print_error
 
 
 def match_hash_prefix(prefix: str, items: list[dict], key: str = "id") -> str:
+    # Exact match first
+    for item in items:
+        if item[key] == prefix:
+            return prefix
     matches = [item[key] for item in items if item[key].startswith(prefix)]
     if len(matches) == 1:
         return matches[0]
     if len(matches) == 0:
         print_error(f"No match for prefix '{prefix}'")
         raise SystemExit(1)
-    # Check for exact match first
-    if prefix in matches:
-        return prefix
     print_error(f"Ambiguous prefix '{prefix}' matches: {', '.join(matches[:5])}")
     raise SystemExit(1)
+
+
+def resolve_squid(client, identifier: str) -> str:
+    """Resolve a squid alias or hash prefix to a full squid ID."""
+    from lobstr_cli.config import resolve_alias
+    identifier = resolve_alias(identifier)
+    all_squids = client.get("/squids")
+    items = all_squids.get("data", [])
+    return match_hash_prefix(identifier, items)
 
 
 def match_crawler_name(name: str, crawlers: list[dict]) -> str:
