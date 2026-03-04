@@ -60,3 +60,6 @@ app.add_typer(squid_app, name="squid", help="Squid management")
 
 from lobstr_cli.commands.task import task_app
 app.add_typer(task_app, name="task", help="Task (input URL) management")
+
+from lobstr_cli.commands.run import run_app
+app.add_typer(run_app, name="run", help="Run lifecycle management")
