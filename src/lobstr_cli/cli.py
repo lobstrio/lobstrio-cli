@@ -54,3 +54,6 @@ app.registered_commands.extend(whoami_app.registered_commands)
 
 from lobstr_cli.commands.crawlers import crawlers_app
 app.add_typer(crawlers_app, name="crawlers", help="Browse and search crawlers")
+
+from lobstr_cli.commands.squid import squid_app
+app.add_typer(squid_app, name="squid", help="Squid management")
