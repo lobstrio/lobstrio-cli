@@ -105,16 +105,22 @@ def show_task(task_id: str = typer.Argument(..., help="Task hash")):
         print_json(data)
         return
     status = data.get("status", {})
-    print_detail([
+    fields = [
         ("Hash", data.get("hash_value")),
         ("Active", data.get("is_active")),
-        ("Status", status.get("status")),
-        ("Results", status.get("total_results")),
-        ("Pages", status.get("total_pages")),
-        ("Done Reason", status.get("done_reason")),
-        ("Errors", status.get("has_errors")),
-        ("Params", data.get("params")),
-    ])
+    ]
+    if isinstance(status, dict):
+        fields.extend([
+            ("Status", status.get("status")),
+            ("Results", status.get("total_results")),
+            ("Pages", status.get("total_pages")),
+            ("Done Reason", status.get("done_reason")),
+            ("Errors", status.get("has_errors")),
+        ])
+    else:
+        fields.append(("Status", status[0] if isinstance(status, list) and status else status))
+    fields.append(("Params", data.get("params")))
+    print_detail(fields)
 
 
 @task_app.command("rm")

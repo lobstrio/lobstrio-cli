@@ -55,11 +55,11 @@ def list_squids(
             s.get("name", ""),
             s.get("id", "")[:12],
             s.get("crawler_name", ""),
-            str(s.get("to_complete", "")),
+            "yes" if s.get("to_complete") else "no",
             s.get("last_run_status", "") or "—",
             str(s.get("concurrency", 1)),
         ])
-    print_table(["Name", "Hash", "Crawler", "Tasks", "Last Run", "Conc."], rows)
+    print_table(["Name", "Hash", "Crawler", "Pending", "Last Run", "Conc."], rows)
 
 
 @squid_app.command("show")
@@ -79,7 +79,7 @@ def show_squid(squid: str = typer.Argument(..., help="Squid hash or prefix")):
         ("Active", data.get("is_active")),
         ("Ready", data.get("is_ready")),
         ("Concurrency", data.get("concurrency")),
-        ("Tasks", data.get("to_complete")),
+        ("Pending Tasks", data.get("to_complete")),
         ("Last Run", data.get("last_run_status")),
         ("Last Run At", data.get("last_run_at")),
         ("Total Runs", data.get("total_runs")),
@@ -111,11 +111,8 @@ def update_squid(
     if unique_results is not None:
         body["export_unique_results"] = unique_results
     if param:
-        params = {}
-        for p in param:
-            k, _, v = p.partition("=")
-            params[k] = v
-        body["params"] = params
+        from lobstr_cli.resolve import parse_params
+        body["params"] = parse_params(param)
     if not body:
         print_error("No options specified. Use --help to see available options.")
         raise typer.Exit(1)

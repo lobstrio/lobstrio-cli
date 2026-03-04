@@ -55,13 +55,17 @@ def whoami():
     if _state.get("json"):
         print_json({**me, "balance": balance})
         return
+    name = f"{me.get('first_name', '')} {me.get('last_name', '')}".strip() or None
+    plan_list = me.get("plan", [])
+    plan_name = plan_list[0].get("name") if plan_list else None
+    plan_status = plan_list[0].get("status") if plan_list else None
     print_detail([
-        ("Name", me.get("name")),
+        ("Name", name),
         ("Email", me.get("email")),
-        ("Plan", me.get("subscription_plan")),
-        ("Status", me.get("subscription_status")),
-        ("Max Concurrency", me.get("max_concurrency")),
-        ("Max Squids", me.get("max_squids")),
-        ("Balance", f"{balance.get('balance', 0)} credits"),
-        ("Pending Cost", balance.get("pending_cost", 0)),
+        ("Plan", plan_name),
+        ("Status", plan_status),
+        ("Staff", me.get("is_staff")),
+        ("Balance", f"{balance.get('available', 0)} credits"),
+        ("Consumed", balance.get("consumed", 0)),
+        ("Slots Used", f"{balance.get('used_slots', '?')}/{balance.get('total_available_slots', '?')}"),
     ])

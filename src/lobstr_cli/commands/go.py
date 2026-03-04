@@ -66,11 +66,8 @@ def go(
         if concurrency is not None:
             update_body["concurrency"] = concurrency
         if param:
-            params = {}
-            for p in param:
-                k, _, v = p.partition("=")
-                params[k] = v
-            update_body["params"] = params
+            from lobstr_cli.resolve import parse_params
+            update_body["params"] = parse_params(param)
         if update_body:
             client.post(f"/squids/{squid_id}", json=update_body)
 

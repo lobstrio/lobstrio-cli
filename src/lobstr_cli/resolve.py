@@ -45,6 +45,32 @@ def match_crawler_name(name: str, crawlers: list[dict]) -> str:
     raise SystemExit(1)
 
 
+def parse_param_value(value: str):
+    """Coerce string param values to appropriate types."""
+    if value.lower() in ("true", "false"):
+        return value.lower() == "true"
+    if value.lower() == "none":
+        return None
+    try:
+        return int(value)
+    except ValueError:
+        pass
+    try:
+        return float(value)
+    except ValueError:
+        pass
+    return value
+
+
+def parse_params(param_list: list[str]) -> dict:
+    """Parse KEY=VALUE pairs into a dict with type coercion."""
+    params = {}
+    for p in param_list:
+        k, _, v = p.partition("=")
+        params[k] = parse_param_value(v)
+    return params
+
+
 def resolve_crawler(identifier: str, crawlers: list[dict]) -> str:
     """Resolve a crawler identifier that could be a hash, prefix, or name."""
     # If it looks like a hex hash/prefix, try hash matching first
