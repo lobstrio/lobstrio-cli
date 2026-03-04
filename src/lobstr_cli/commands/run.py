@@ -8,7 +8,7 @@ from lobstr_cli.display import (
     print_json, print_table, print_detail, print_success,
     print_info, print_error, make_progress,
 )
-from lobstr_cli.resolve import resolve_squid as _resolve_squid
+from lobstr_cli.resolve import resolve_squid as _resolve_squid, require_full_hash
 
 run_app = typer.Typer(no_args_is_help=True)
 
@@ -58,12 +58,12 @@ def start_run(
     if _state.get("json") and not (wait or download):
         print_json(result)
         return
-    print_success(f"Started run {run_id[:12]}")
+    print_success(f"Started run {run_id}")
     if download or wait:
         try:
             run = _poll_run(client, run_id, download_path=download)
         except KeyboardInterrupt:
-            print_info(f"\nInterrupted. Resume with: lobstr run watch {run_id[:12]}")
+            print_info(f"\nInterrupted. Resume with: lobstr run watch {run_id}")
             raise typer.Exit(0)
         if _state.get("json"):
             print_json(run)
@@ -97,7 +97,7 @@ def list_runs(
         duration = r.get("duration")
         dur_str = f"{duration:.0f}s" if isinstance(duration, (int, float)) else str(duration or "—")
         rows.append([
-            r.get("id", "")[:12],
+            r.get("id", ""),
             r.get("status", ""),
             str(r.get("total_results", "")),
             dur_str,
@@ -108,10 +108,11 @@ def list_runs(
 
 
 @run_app.command("show")
-def show_run(run_id: str = typer.Argument(..., help="Run hash or prefix")):
+def show_run(run_id: str = typer.Argument(..., help="Full run hash")):
     """Show run details."""
     from lobstr_cli.cli import get_client, _state
     client = get_client()
+    require_full_hash(run_id, "run")
     data = client.get(f"/runs/{run_id}")
     if _state.get("json"):
         print_json(data)
@@ -133,10 +134,11 @@ def show_run(run_id: str = typer.Argument(..., help="Run hash or prefix")):
 
 
 @run_app.command("stats")
-def run_stats(run_id: str = typer.Argument(..., help="Run hash")):
+def run_stats(run_id: str = typer.Argument(..., help="Full run hash")):
     """Show run statistics."""
     from lobstr_cli.cli import get_client, _state
     client = get_client()
+    require_full_hash(run_id, "run")
     data = client.get(f"/runs/{run_id}/stats")
     if _state.get("json"):
         print_json(data)
@@ -154,13 +156,14 @@ def run_stats(run_id: str = typer.Argument(..., help="Run hash")):
 
 @run_app.command("tasks")
 def run_tasks(
-    run_id: str = typer.Argument(..., help="Run hash"),
+    run_id: str = typer.Argument(..., help="Full run hash"),
     limit: int = typer.Option(50, "--limit"),
     page: int = typer.Option(1, "--page"),
 ):
     """List tasks in a run."""
     from lobstr_cli.cli import get_client, _state
     client = get_client()
+    require_full_hash(run_id, "run")
     data = client.get("/runtasks", params={"run": run_id, "limit": limit, "page": page})
     if _state.get("json"):
         print_json(data)
@@ -171,7 +174,7 @@ def run_tasks(
         params = t.get("params", {})
         url = params.get("url", str(params)[:50])
         rows.append([
-            t.get("id", "")[:12],
+            t.get("id", ""),
             t.get("status", ""),
             str(t.get("total_results", "")),
             str(url)[:60],
@@ -181,25 +184,27 @@ def run_tasks(
 
 
 @run_app.command("abort")
-def abort_run(run_id: str = typer.Argument(..., help="Run hash")):
+def abort_run(run_id: str = typer.Argument(..., help="Full run hash")):
     """Abort a running run."""
     from lobstr_cli.cli import get_client, _state
     client = get_client()
+    require_full_hash(run_id, "run")
     result = client.post(f"/runs/{run_id}/abort")
     if _state.get("json"):
         print_json(result)
         return
-    print_success(f"Aborted run {run_id[:12]}")
+    print_success(f"Aborted run {run_id}")
 
 
 @run_app.command("download")
 def download_run(
-    run_id: str = typer.Argument(..., help="Run hash"),
+    run_id: str = typer.Argument(..., help="Full run hash"),
     path: str = typer.Argument("results.csv", help="Output file path"),
 ):
     """Download run results as CSV."""
     from lobstr_cli.cli import get_client, _state
     client = get_client()
+    require_full_hash(run_id, "run")
     dl = client.get(f"/runs/{run_id}/download")
     if _state.get("json"):
         print_json(dl)
@@ -213,10 +218,11 @@ def download_run(
 
 
 @run_app.command("watch")
-def watch_run(run_id: str = typer.Argument(..., help="Run hash")):
+def watch_run(run_id: str = typer.Argument(..., help="Full run hash")):
     """Live-poll run progress with progress bar."""
     from lobstr_cli.cli import get_client, _state
     client = get_client()
+    require_full_hash(run_id, "run")
     try:
         run = _poll_run(client, run_id)
     except KeyboardInterrupt:

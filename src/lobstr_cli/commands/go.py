@@ -82,13 +82,13 @@ def go(
         # 6. Start run
         run = client.post("/runs", json={"squid": squid_id})
         run_id = run["id"]
-        print_info(f"Run started: {run_id[:12]}")
+        print_info(f"Run started: {run_id}")
 
         if no_download:
             if _state.get("json"):
                 print_json({"squid": squid_id, "run": run_id})
             else:
-                print_success(f"Run {run_id[:12]} started. Watch with: lobstr run watch {run_id[:12]}")
+                print_success(f"Run started. Watch with: lobstr run watch {run_id}")
             return
 
         # 7. Poll with progress
@@ -133,7 +133,7 @@ def go(
             client.download(s3_url, output)
             print_success(f"Downloaded {final.get('total_results', '?')} results to {output}")
         else:
-            print_info("Export not ready. Try: lobstr run download " + run_id[:12])
+            print_info("Export not ready. Try: lobstr run download " + run_id)
 
         print_detail([
             ("Status", final.get("status")),
@@ -147,7 +147,7 @@ def go(
         if squid_id:
             msg += f" Squid: {squid_id[:12]}"
         if run_id:
-            msg += f" Run: {run_id[:12]}"
+            msg += f" Run: {run_id}"
         print_info(msg)
         raise typer.Exit(0)
     except Exception:

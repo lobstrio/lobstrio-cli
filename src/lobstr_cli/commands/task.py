@@ -5,7 +5,7 @@ from typing import Optional
 import typer
 
 from lobstr_cli.display import print_json, print_table, print_detail, print_success, print_info, print_error
-from lobstr_cli.resolve import resolve_squid as _resolve_squid
+from lobstr_cli.resolve import resolve_squid as _resolve_squid, require_full_hash
 
 task_app = typer.Typer(no_args_is_help=True)
 
@@ -88,7 +88,7 @@ def list_tasks(
         params = t.get("params", {})
         url = params.get("url", str(params)[:60])
         rows.append([
-            t.get("id", "")[:12],
+            t.get("id", ""),
             "yes" if t.get("is_active") else "no",
             str(url)[:70],
             t.get("created_at", "")[:10],
@@ -97,10 +97,11 @@ def list_tasks(
 
 
 @task_app.command("show")
-def show_task(task_id: str = typer.Argument(..., help="Task hash")):
+def show_task(task_id: str = typer.Argument(..., help="Full task hash")):
     """Show task details."""
     from lobstr_cli.cli import get_client, _state
     client = get_client()
+    require_full_hash(task_id, "task")
     data = client.get(f"/tasks/{task_id}")
     if _state.get("json"):
         print_json(data)
@@ -125,12 +126,13 @@ def show_task(task_id: str = typer.Argument(..., help="Task hash")):
 
 
 @task_app.command("rm")
-def delete_task(task_id: str = typer.Argument(..., help="Task hash")):
+def delete_task(task_id: str = typer.Argument(..., help="Full task hash")):
     """Delete a task."""
     from lobstr_cli.cli import get_client, _state
     client = get_client()
+    require_full_hash(task_id, "task")
     result = client.delete(f"/tasks/{task_id}")
     if _state.get("json"):
         print_json(result)
         return
-    print_success(f"Deleted task {task_id[:12]}")
+    print_success(f"Deleted task {task_id}")

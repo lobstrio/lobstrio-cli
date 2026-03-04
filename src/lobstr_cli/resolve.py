@@ -3,6 +3,17 @@ from __future__ import annotations
 from lobstr_cli.display import print_error
 
 
+def require_full_hash(value: str, label: str = "resource") -> None:
+    """Raise a clear error if a partial hash is given for run/task endpoints."""
+    if len(value) < 32:
+        print_error(
+            f"The API requires a full 32-character hash for {label}s. "
+            f"Got {len(value)} characters: '{value}'. "
+            f"Use `lobstr run ls` or `lobstr task ls` to get full hashes."
+        )
+        raise SystemExit(1)
+
+
 def match_hash_prefix(prefix: str, items: list[dict], key: str = "id") -> str:
     # Exact match first
     for item in items:
