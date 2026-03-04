@@ -16,8 +16,9 @@ go_app = typer.Typer()
 @go_app.command("go")
 def go(
     crawler: str = typer.Argument(..., help="Crawler name or hash"),
-    urls: Optional[list[str]] = typer.Argument(None, help="URLs to scrape"),
-    file: Optional[Path] = typer.Option(None, "--file", "-f", help="File with URLs (one per line)"),
+    inputs: Optional[list[str]] = typer.Argument(None, help="URLs or keywords for tasks"),
+    file: Optional[Path] = typer.Option(None, "--file", "-f", help="File with inputs (one per line)"),
+    key: str = typer.Option("url", "--key", "-k", help="Task param name (url, keyword, etc.)"),
     param: Optional[list[str]] = typer.Option(None, "--param", "-p", help="KEY=VALUE, repeatable"),
     concurrency: Optional[int] = typer.Option(None, "--concurrency", "-c"),
     output: str = typer.Option("results.csv", "--output", "-o", help="Output file path"),
@@ -37,23 +38,23 @@ def go(
     crawler_name = next((c["name"] for c in items if c["id"] == crawler_id), crawler_id[:12])
     print_info(f"Using crawler: {crawler_name}")
 
-    # 2. Gather URLs
-    task_urls = list(urls) if urls else []
+    # 2. Gather inputs
+    task_inputs = list(inputs) if inputs else []
     if file:
         with open(file) as f:
             for line in f:
                 line = line.strip()
                 if line and not line.startswith("#"):
-                    task_urls.append(line)
-    if not task_urls:
-        print_error("No URLs provided. Pass URLs as arguments or use --file.")
+                    task_inputs.append(line)
+    if not task_inputs:
+        print_error("No inputs provided. Pass URLs/keywords as arguments or use --file.")
         raise typer.Exit(1)
 
     squid_id = None
     run_id = None
     try:
         # 3. Create squid
-        print_info(f"Creating squid ({len(task_urls)} tasks)...")
+        print_info(f"Creating squid ({len(task_inputs)} tasks)...")
         body: dict = {"crawler": crawler_id}
         if name:
             body["name"] = name
@@ -72,7 +73,7 @@ def go(
             client.post(f"/squids/{squid_id}", json=update_body)
 
         # 5. Add tasks
-        tasks = [{"url": url} for url in task_urls]
+        tasks = [{key: val} for val in task_inputs]
         result = client.post("/tasks", json={"squid": squid_id, "tasks": tasks})
         created = result.get("tasks", [])
         dupes = result.get("duplicated_count", 0)
@@ -109,19 +110,30 @@ def go(
                     break
                 time.sleep(3)
 
-        # 8. Download
+        # 8. Download (with retry — export may take a moment)
         final = client.get(f"/runs/{run_id}")
         if _state.get("json"):
             print_json(final)
             return
 
-        dl = client.get(f"/runs/{run_id}/download")
-        s3_url = dl.get("s3", "")
+        s3_url = ""
+        for attempt in range(5):
+            try:
+                dl = client.get(f"/runs/{run_id}/download")
+                s3_url = dl.get("s3", "")
+                if s3_url:
+                    break
+            except Exception:
+                pass
+            if attempt == 0:
+                print_info("Waiting for export...")
+            time.sleep(5)
+
         if s3_url:
             client.download(s3_url, output)
             print_success(f"Downloaded {final.get('total_results', '?')} results to {output}")
         else:
-            print_info("No download available yet. Try: lobstr run download " + run_id[:12])
+            print_info("Export not ready. Try: lobstr run download " + run_id[:12])
 
         print_detail([
             ("Status", final.get("status")),
@@ -138,3 +150,12 @@ def go(
             msg += f" Run: {run_id[:12]}"
         print_info(msg)
         raise typer.Exit(0)
+    except Exception:
+        if squid_id and not run_id:
+            # Clean up orphaned squid if error before run started
+            try:
+                client.delete(f"/squids/{squid_id}")
+                print_info(f"Cleaned up squid {squid_id[:12]}")
+            except Exception:
+                print_info(f"Squid {squid_id[:12]} may need manual cleanup")
+        raise

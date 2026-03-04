@@ -13,13 +13,14 @@ task_app = typer.Typer(no_args_is_help=True)
 @task_app.command("add")
 def add_tasks(
     squid: str = typer.Argument(..., help="Squid hash or prefix"),
-    urls: list[str] = typer.Argument(..., help="URLs to add as tasks"),
+    values: list[str] = typer.Argument(..., help="URLs or keywords to add as tasks"),
+    key: str = typer.Option("url", "--key", "-k", help="Task param name (url, keyword, etc.)"),
 ):
-    """Add URL tasks to a squid."""
+    """Add tasks to a squid."""
     from lobstr_cli.cli import get_client, _state
     client = get_client()
     squid_id = _resolve_squid(client, squid)
-    tasks = [{"url": url} for url in urls]
+    tasks = [{key: v} for v in values]
     result = client.post("/tasks", json={"squid": squid_id, "tasks": tasks})
     if _state.get("json"):
         print_json(result)

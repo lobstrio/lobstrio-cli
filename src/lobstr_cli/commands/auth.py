@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import typer
 
-from lobstr_cli.config import save_token, load_config, get_config_path
+from lobstr_cli.config import save_token, save_alias, load_config, get_config_path
 from lobstr_cli.display import print_success, print_detail, print_json, print_error, print_table
 
 config_app = typer.Typer(no_args_is_help=True)
@@ -43,6 +43,16 @@ def show_config():
         for name, h in aliases.items():
             fields.append((f"Alias @{name}", h))
     print_detail(fields)
+
+
+@config_app.command("set-alias")
+def set_alias(
+    name: str = typer.Argument(..., help="Alias name (used as @name)"),
+    squid_id: str = typer.Argument(..., help="Squid hash to alias"),
+):
+    """Create an alias for a squid hash."""
+    save_alias(name, squid_id)
+    print_success(f"Alias @{name} -> {squid_id[:12]}")
 
 
 @whoami_app.command("whoami")

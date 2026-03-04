@@ -78,7 +78,7 @@ def crawler_params(crawler: str = typer.Argument(..., help="Crawler hash or pref
         for name, spec in squid_params.items():
             if name == "functions":
                 continue
-            allowed = ", ".join(spec["allowed"]) if isinstance(spec.get("allowed"), list) else ""
+            allowed = ", ".join(str(v) for v in spec["allowed"]) if isinstance(spec.get("allowed"), list) else ""
             rows.append([
                 name,
                 str(spec.get("default", "")),
