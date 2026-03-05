@@ -3,7 +3,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "lobstr-cli"
+name = "lobstrio-cli"
 version = "0.1.0"
 description = "CLI for the Lobstr.io scraping API"
 readme = "README.md"

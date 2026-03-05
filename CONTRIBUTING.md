@@ -1,4 +1,4 @@
-# Contributing to lobstr-cli
+# Contributing to lobstrio-cli
 
 Thanks for your interest in contributing!
 
@@ -77,7 +77,7 @@ tests/
 
 ## Reporting issues
 
-Open an issue at [github.com/lobstrio/lobstr-cli/issues](https://github.com/lobstrio/lobstr-cli/issues) with:
+Open an issue at [github.com/lobstrio/lobstrio-cli/issues](https://github.com/lobstrio/lobstrio-cli/issues) with:
 
 - What you expected to happen
 - What actually happened

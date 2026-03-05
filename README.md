@@ -1,4 +1,4 @@
-# lobstr-cli
+# lobstrio-cli
 
 Command-line interface for the [Lobstr.io](https://lobstr.io) scraping API.
 
@@ -7,7 +7,7 @@ Run web scrapers, manage squids, download results — all from your terminal.
 ## Installation
 
 ```bash
-pip install lobstr-cli
+pip install lobstrio-cli
 ```
 
 ## Quick start
