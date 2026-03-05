@@ -44,11 +44,11 @@ dev = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/lobstrio/lobstr-cli"
-Documentation = "https://github.com/lobstrio/lobstr-cli#readme"
-Repository = "https://github.com/lobstrio/lobstr-cli"
-Issues = "https://github.com/lobstrio/lobstr-cli/issues"
-Changelog = "https://github.com/lobstrio/lobstr-cli/blob/main/CHANGELOG.md"
+Homepage = "https://github.com/lobstrio/lobstrio-cli"
+Documentation = "https://github.com/lobstrio/lobstrio-cli#readme"
+Repository = "https://github.com/lobstrio/lobstrio-cli"
+Issues = "https://github.com/lobstrio/lobstrio-cli/issues"
+Changelog = "https://github.com/lobstrio/lobstrio-cli/blob/main/CHANGELOG.md"
 
 [project.scripts]
 lobstr = "lobstr_cli.__main__:main"
