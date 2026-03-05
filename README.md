@@ -50,7 +50,7 @@ lobstr crawlers params "Google Maps"   # Show crawler parameters
 ```bash
 lobstr squid create "Google Maps" --name "My Scraper"
 lobstr squid ls                        # List your squids
-lobstr squid show SQUID_HASH           # Show details
+lobstr squid show SQUID           # Show details
 lobstr squid update SQUID --concurrency 5 --param max_results=200
 lobstr squid empty SQUID               # Remove all tasks
 lobstr squid rm SQUID --force          # Delete squid
