@@ -34,7 +34,7 @@ lobstr go "Google Maps Leads" --file urls.txt -o results.csv
 lobstr whoami                          # Show account info and balance
 lobstr config set-token TOKEN          # Save API token
 lobstr config show                     # Show current config
-lobstr config set-alias maps SQUID_ID  # Create alias for a squid
+lobstr config set-alias maps SQUID  # Create alias for a squid
 ```
 
 ### Crawlers
