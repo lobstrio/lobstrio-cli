@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.0] - 2026-03-06
+
+### Added
+
+- Slug-based resolution for crawlers: hash → slug → name (slug is now the primary identifier)
+- Slug prefix matching for crawlers (e.g. `google-maps` matches `google-maps-leads-scraper`)
+- Name-based resolution for squids: alias → hash → name (exact match, then substring)
+- `crawlers show` command with grouped detail output (credits, flags, worker stats)
+- `print_detail_grouped` display function for sectioned detail views
+- Slug column in `crawlers ls` output
+
+### Changed
+
+- License changed from MIT to Apache 2.0
+- Crawler commands now prioritize slug over name for identification
+- README updated with slug-based examples and identifier resolution documentation
+
 ## [0.1.0] - 2025-03-05
 
 ### Added
