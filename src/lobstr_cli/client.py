@@ -68,8 +68,8 @@ class LobstrClient:
         resp = self._client.get(path, params=params)
         return self._handle_response(resp)
 
-    def post(self, path: str, json: dict | None = None, data: dict | None = None, files: dict | None = None) -> dict:
-        resp = self._client.post(path, json=json, data=data, files=files)
+    def post(self, path: str, json: dict | None = None, data: dict | None = None, files: dict | None = None, params: dict | None = None) -> dict:
+        resp = self._client.post(path, json=json, data=data, files=files, params=params)
         return self._handle_response(resp)
 
     def delete(self, path: str) -> dict:
