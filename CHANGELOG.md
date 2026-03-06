@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] - 2026-03-06
+
+### Added
+
+- Account management commands: `accounts ls`, `show`, `rm`, `types`, `sync`, `sync-status`, `update`
+- Account sync with multiple cookie input methods: `--cookie`, `--cookies-json`, `--cookies-file`
+- Account resolution by hash prefix or username
+- Delivery configuration commands: `delivery email`, `googlesheet`, `s3`, `webhook`, `sftp`
+- Delivery test commands: `delivery test-email`, `test-googlesheet`, `test-s3`, `test-webhook`, `test-sftp`
+- `crawlers show` now uses dedicated API endpoint with input parameters and result fields
+- Query params support in `client.post()` for delivery endpoints
+
 ## [0.2.0] - 2026-03-06
 
 ### Added
