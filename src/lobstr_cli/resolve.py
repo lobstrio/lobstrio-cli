@@ -81,6 +81,37 @@ def resolve_squid(client, identifier: str) -> str:
     return match_name(identifier, items, "squid")
 
 
+def match_username(username: str, items: list[dict], label: str = "account") -> str:
+    """Match by username: exact first, then substring, error on ambiguous."""
+    lower = username.lower()
+    for item in items:
+        if item.get("username", "").lower() == lower:
+            return item["id"]
+    matches = [item for item in items if lower in item.get("username", "").lower()]
+    if len(matches) == 1:
+        return matches[0]["id"]
+    if len(matches) == 0:
+        print_error(f"No {label} matching username '{username}'")
+        raise SystemExit(1)
+    names = [m.get("username", "") for m in matches[:5]]
+    print_error(f"Ambiguous {label} username '{username}' matches: {', '.join(names)}")
+    raise SystemExit(1)
+
+
+def resolve_account(client, identifier: str) -> str:
+    """Resolve an account by hash prefix or username."""
+    all_accounts = client.get("/accounts")
+    items = all_accounts.get("data", [])
+    # 1. Hash: if all hex chars, try hash prefix match
+    if all(c in "0123456789abcdef" for c in identifier.lower()):
+        try:
+            return match_hash_prefix(identifier.lower(), items)
+        except SystemExit:
+            pass
+    # 2. Username: fallback
+    return match_username(identifier, items, "account")
+
+
 def match_crawler_name(name: str, crawlers: list[dict]) -> str:
     return match_name(name, crawlers, "crawler")
 

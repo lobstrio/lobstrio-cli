@@ -4,9 +4,11 @@ from lobstr_cli.resolve import (
     match_hash_prefix,
     match_slug,
     match_name,
+    match_username,
     match_crawler_name,
     resolve_crawler,
     resolve_squid,
+    resolve_account,
     parse_param_value,
     parse_params,
     require_full_hash,
@@ -375,3 +377,60 @@ class TestRequireFullHash:
     def test_longer_than_32_passes(self):
         # Should not raise for >= 32
         require_full_hash("a" * 40, "run")
+
+
+# --- match_username ---
+
+class TestMatchUsername:
+    def test_exact_match(self):
+        items = [{"id": "a1", "username": "johndoe"}, {"id": "a2", "username": "janedoe"}]
+        assert match_username("johndoe", items) == "a1"
+
+    def test_case_insensitive(self):
+        items = [{"id": "a1", "username": "JohnDoe"}]
+        assert match_username("johndoe", items) == "a1"
+
+    def test_substring_match(self):
+        items = [{"id": "a1", "username": "john_twitter"}, {"id": "a2", "username": "jane_facebook"}]
+        assert match_username("twitter", items) == "a1"
+
+    def test_no_match(self):
+        items = [{"id": "a1", "username": "johndoe"}]
+        with pytest.raises(SystemExit):
+            match_username("notfound", items)
+
+    def test_ambiguous_match(self):
+        items = [{"id": "a1", "username": "john_twitter"}, {"id": "a2", "username": "john_facebook"}]
+        with pytest.raises(SystemExit):
+            match_username("john", items)
+
+    def test_exact_wins_over_substring(self):
+        items = [
+            {"id": "a1", "username": "john"},
+            {"id": "a2", "username": "john_doe"},
+        ]
+        assert match_username("john", items) == "a1"
+
+
+# --- resolve_account ---
+
+class TestResolveAccount:
+    def test_resolve_by_hash_prefix(self):
+        client = MagicMock()
+        client.get.return_value = {"data": [{"id": "aabb11cc22dd", "username": "johndoe"}]}
+        assert resolve_account(client, "aabb11") == "aabb11cc22dd"
+
+    def test_resolve_by_username(self):
+        client = MagicMock()
+        client.get.return_value = {"data": [{"id": "acc123", "username": "johndoe"}]}
+        assert resolve_account(client, "johndoe") == "acc123"
+
+    def test_hex_falls_back_to_username(self):
+        client = MagicMock()
+        client.get.return_value = {"data": [{"id": "xyz789", "username": "deadbeef"}]}
+        assert resolve_account(client, "deadbeef") == "xyz789"
+
+    def test_hex_prefers_hash_over_username(self):
+        client = MagicMock()
+        client.get.return_value = {"data": [{"id": "deadbeef1234", "username": "deadbeef"}]}
+        assert resolve_account(client, "deadbeef") == "deadbeef1234"
