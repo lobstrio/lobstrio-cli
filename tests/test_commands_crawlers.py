@@ -12,6 +12,7 @@ SAMPLE_CRAWLERS = {
         {
             "id": "abc123def456",
             "name": "Google Maps Leads Scraper",
+            "slug": "google-maps-leads-scraper",
             "credits_per_row": {"current": 3},
             "max_concurrency": 5,
             "account": None,
@@ -22,6 +23,7 @@ SAMPLE_CRAWLERS = {
         {
             "id": "def789abc012",
             "name": "LinkedIn Profile Scraper",
+            "slug": "linkedin-profile-scraper",
             "credits_per_row": 2,
             "max_concurrency": 3,
             "account": True,
@@ -74,6 +76,30 @@ class TestCrawlersLs:
         with patch("lobstr_cli.cli.get_client", return_value=mock):
             result = runner.invoke(app, ["crawlers", "ls"])
         assert result.exit_code == 0
+
+
+class TestCrawlersShow:
+    def test_show_by_slug(self):
+        mock = _mock_client(lambda path, **kw: SAMPLE_CRAWLERS)
+        with patch("lobstr_cli.cli.get_client", return_value=mock):
+            result = runner.invoke(app, ["crawlers", "show", "google-maps-leads-scraper"])
+        assert result.exit_code == 0
+        assert "Google Maps Leads Scraper" in result.output
+        assert "google-maps-leads-scraper" in result.output
+
+    def test_show_by_name(self):
+        mock = _mock_client(lambda path, **kw: SAMPLE_CRAWLERS)
+        with patch("lobstr_cli.cli.get_client", return_value=mock):
+            result = runner.invoke(app, ["crawlers", "show", "LinkedIn Profile"])
+        assert result.exit_code == 0
+        assert "LinkedIn Profile Scraper" in result.output
+
+    def test_show_json(self):
+        mock = _mock_client(lambda path, **kw: SAMPLE_CRAWLERS)
+        with patch("lobstr_cli.cli.get_client", return_value=mock):
+            result = runner.invoke(app, ["--json", "crawlers", "show", "google-maps-leads-scraper"])
+        assert result.exit_code == 0
+        assert "abc123def456" in result.output
 
 
 class TestCrawlersSearch:
@@ -160,3 +186,47 @@ class TestCrawlersParams:
             result = runner.invoke(app, ["crawlers", "params", "Google Maps"])
         assert result.exit_code == 0
         assert "10" in result.output
+
+    def test_params_by_exact_slug(self):
+        """Resolve crawler by exact slug."""
+        responses = {
+            "/crawlers": SAMPLE_CRAWLERS,
+            "/crawlers/abc123def456/params": {
+                "task": {"url": {"type": "string", "required": True, "default": "", "regex": ""}},
+                "squid": {},
+            },
+        }
+        mock = _mock_client(lambda path, **kw: responses[path])
+        with patch("lobstr_cli.cli.get_client", return_value=mock):
+            result = runner.invoke(app, ["crawlers", "params", "google-maps-leads-scraper"])
+        assert result.exit_code == 0
+        assert "url" in result.output
+
+    def test_params_by_slug_prefix(self):
+        """Resolve crawler by slug prefix (unique)."""
+        responses = {
+            "/crawlers": SAMPLE_CRAWLERS,
+            "/crawlers/def789abc012/params": {
+                "task": {"url": {"type": "string", "required": True, "default": "", "regex": ""}},
+                "squid": {},
+            },
+        }
+        mock = _mock_client(lambda path, **kw: responses[path])
+        with patch("lobstr_cli.cli.get_client", return_value=mock):
+            result = runner.invoke(app, ["crawlers", "params", "linkedin-profile"])
+        assert result.exit_code == 0
+
+    def test_params_ambiguous_slug(self):
+        """Ambiguous slug prefix should error."""
+        crawlers = {"data": [
+            {"id": "c1", "name": "Google Maps Leads", "slug": "google-maps-leads",
+             "credits_per_row": 1, "max_concurrency": 1, "account": None,
+             "has_issues": False, "is_available": True, "is_premium": False},
+            {"id": "c2", "name": "Google Maps Reviews", "slug": "google-maps-reviews",
+             "credits_per_row": 1, "max_concurrency": 1, "account": None,
+             "has_issues": False, "is_available": True, "is_premium": False},
+        ]}
+        mock = _mock_client(lambda path, **kw: crawlers)
+        with patch("lobstr_cli.cli.get_client", return_value=mock):
+            result = runner.invoke(app, ["crawlers", "params", "google-maps"])
+        assert result.exit_code != 0

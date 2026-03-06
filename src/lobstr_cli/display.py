@@ -70,6 +70,31 @@ def print_detail(fields: list[tuple[str, Any]]) -> None:
     console.print(table)
 
 
+def print_detail_grouped(sections: list[tuple[str | None, list[tuple[str, Any]]]]) -> None:
+    """Print detail fields organized into labeled sections.
+
+    Each section is a (title, fields) tuple. Title can be None for untitled sections.
+    """
+    from rich.panel import Panel
+    from rich.text import Text
+
+    table = Table(show_header=False, box=None, padding=(0, 2))
+    table.add_column("Field", style="bold cyan")
+    table.add_column("Value")
+    first = True
+    for title, fields in sections:
+        if not fields:
+            continue
+        if title:
+            if not first:
+                table.add_row("", "")
+            table.add_row(f"[bold yellow]{title}[/]", "")
+        for name, value in fields:
+            table.add_row(name, str(value) if value is not None else "[dim]—[/]")
+        first = False
+    console.print(table)
+
+
 def make_progress() -> Progress:
     return Progress(
         SpinnerColumn(),
