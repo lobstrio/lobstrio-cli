@@ -71,10 +71,11 @@ class TestAccountsLs:
 
 class TestAccountsShow:
     def test_show_by_username(self):
+        single_account = {"data": [ACCOUNTS["data"][0]]}
         def get_resp(path, **kw):
             if path == "/accounts":
                 return ACCOUNTS
-            return ACCOUNTS["data"][0]
+            return single_account
         mock = _mock_client(get_resp)
         with patch("lobstr_cli.cli.get_client", return_value=mock):
             result = runner.invoke(app, ["accounts", "show", "johndoe"])
@@ -83,10 +84,11 @@ class TestAccountsShow:
         assert "twitter-sync" in result.output
 
     def test_show_json(self):
+        single_account = {"data": [ACCOUNTS["data"][0]]}
         def get_resp(path, **kw):
             if path == "/accounts":
                 return ACCOUNTS
-            return ACCOUNTS["data"][0]
+            return single_account
         mock = _mock_client(get_resp)
         with patch("lobstr_cli.cli.get_client", return_value=mock):
             result = runner.invoke(app, ["--json", "accounts", "show", "johndoe"])

@@ -101,7 +101,7 @@ class TestDeliveryWebhook:
         assert result.exit_code == 0
         assert "configured" in result.output
         call_json = mock.post.call_args[1]["json"]
-        assert call_json["webhook_fields"]["events"]["run"]["done"] is True
+        assert call_json["webhook_fields"]["events"]["run.done"] is True
 
 
 class TestDeliverySftp:

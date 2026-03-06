@@ -108,12 +108,10 @@ def configure_webhook(
         "is_active": active,
         "retry": retry,
         "events": {
-            "run": {
-                "running": on_running,
-                "paused": on_paused,
-                "done": on_done,
-                "error": on_error,
-            }
+            "run.running": on_running,
+            "run.paused": on_paused,
+            "run.done": on_done,
+            "run.error": on_error,
         },
     }}
     result = client.post("/delivery", json=body, params={"squid": squid_id})

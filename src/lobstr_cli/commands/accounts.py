@@ -39,7 +39,9 @@ def show_account(account: str = typer.Argument(..., help="Account hash or userna
     from lobstr_cli.cli import get_client, _state
     client = get_client()
     account_id = _resolve_account(client, account)
-    data = client.get(f"/accounts/{account_id}")
+    resp = client.get(f"/accounts/{account_id}")
+    # API returns paginated {"data": [...]} even for single account
+    data = resp["data"][0] if isinstance(resp, dict) and "data" in resp else resp
     if _state.get("json"):
         print_json(data)
         return
