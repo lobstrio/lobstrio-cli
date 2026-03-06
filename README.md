@@ -17,13 +17,13 @@ pip install lobstrio-cli
 lobstr config set-token YOUR_TOKEN
 
 # One-command scrape: create squid, add tasks, run, download
-lobstr go "Google Maps Leads" "https://maps.google.com/maps/place/..." -o leads.csv
+lobstr go google-maps-leads-scraper "https://maps.google.com/maps/place/..." -o leads.csv
 
 # Multiple URLs
-lobstr go "Google Maps Leads" url1 url2 url3 -o results.csv
+lobstr go google-maps-leads-scraper url1 url2 url3 -o results.csv
 
 # From a file
-lobstr go "Google Maps Leads" --file urls.txt -o results.csv
+lobstr go google-maps-leads-scraper --file urls.txt -o results.csv
 ```
 
 ## Commands
@@ -40,17 +40,18 @@ lobstr config set-alias maps SQUID  # Create alias for a squid
 ### Crawlers
 
 ```bash
-lobstr crawlers ls                     # List all available crawlers
-lobstr crawlers search "Google Maps"   # Search by name
-lobstr crawlers params "Google Maps"   # Show crawler parameters
+lobstr crawlers ls                                   # List all available crawlers
+lobstr crawlers show google-maps-leads-scraper       # Show crawler details
+lobstr crawlers search "Google Maps"                 # Search by name
+lobstr crawlers params google-maps-leads-scraper     # Show crawler parameters
 ```
 
 ### Squids
 
 ```bash
-lobstr squid create "Google Maps" --name "My Scraper"
+lobstr squid create google-maps-leads-scraper --name "My Scraper"
 lobstr squid ls                        # List your squids
-lobstr squid show SQUID           # Show details
+lobstr squid show SQUID                # Show details
 lobstr squid update SQUID --concurrency 5 --param max_results=200
 lobstr squid empty SQUID               # Remove all tasks
 lobstr squid rm SQUID --force          # Delete squid
@@ -97,31 +98,31 @@ The `go` command handles the entire workflow in one shot:
 
 ```bash
 # Basic usage
-lobstr go "Google Maps Leads" "https://maps.google.com/..." -o results.csv
+lobstr go google-maps-leads-scraper "https://maps.google.com/..." -o results.csv
 
 # Keyword-based crawler
-lobstr go "Google Search" "pizza delivery" --key keyword
+lobstr go google-search-scraper "pizza delivery" --key keyword
 
 # With crawler parameters
-lobstr go "Google Maps" url1 --param max_results=200 --param language=English
+lobstr go google-maps-leads-scraper url1 --param max_results=200 --param language=English
 
 # Set concurrency
-lobstr go "Google Maps" url1 --concurrency 3
+lobstr go google-maps-leads-scraper url1 --concurrency 3
 
 # Start without waiting for download
-lobstr go "Google Maps" url1 --no-download
+lobstr go google-maps-leads-scraper url1 --no-download
 
 # Reuse existing squid by name
-lobstr go "Google Maps" url1 --name "My Leads"
+lobstr go google-maps-leads-scraper url1 --name "My Leads"
 
 # Clear old tasks when reusing squid
-lobstr go "Google Maps" url1 --name "My Leads" --empty
+lobstr go google-maps-leads-scraper url1 --name "My Leads" --empty
 
 # Delete squid after completion
-lobstr go "Google Maps" url1 --delete
+lobstr go google-maps-leads-scraper url1 --delete
 
 # Custom output file
-lobstr go "Google Maps" url1 -o my_leads.csv
+lobstr go google-maps-leads-scraper url1 -o my_leads.csv
 ```
 
 ## Global flags
@@ -148,13 +149,39 @@ lobstr run start @maps
 
 Config is stored at `~/.config/lobstr/config.toml`. The API token can also be set via the `LOBSTR_TOKEN` environment variable.
 
-## Hash prefixes
+## Identifier resolution
 
-Squid and crawler hashes support prefix matching — type just enough characters to be unique:
+### Crawlers
+
+Crawlers are resolved in this order:
+
+1. **Hash** — if the input is all hex characters, match by hash prefix
+2. **Slug** — if the input contains dashes, match by slug (exact or prefix)
+3. **Name** — fallback to name matching (exact or substring)
 
 ```bash
-lobstr squid show abc1    # Matches abc123def456...
+lobstr crawlers show 4734d096          # by hash prefix
+lobstr crawlers show google-maps       # by slug prefix
+lobstr crawlers show "Google Maps"     # by name
 ```
+
+Slug is the recommended identifier — it's stable, readable, and tab-completable. Use `lobstr crawlers ls` to see available slugs.
+
+### Squids
+
+Squids are resolved in this order:
+
+1. **Alias** — if prefixed with `@`, resolve via configured alias
+2. **Hash** — if all hex characters, match by hash prefix
+3. **Name** — fallback to name matching (exact or substring)
+
+```bash
+lobstr squid show @maps               # by alias
+lobstr squid show abc1                # by hash prefix
+lobstr squid show "My Scraper"        # by name
+```
+
+### Runs & tasks
 
 Run and task commands require full 32-character hashes. Use `lobstr run ls` or `lobstr task ls` to see full hashes.
 
@@ -175,4 +202,4 @@ ruff check src/
 
 ## License
 
-[MIT](LICENSE)
+[Apache 2.0](LICENSE)
