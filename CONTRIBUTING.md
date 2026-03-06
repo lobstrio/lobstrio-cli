@@ -59,8 +59,10 @@ src/lobstr_cli/
     display.py           # Rich output helpers
     resolve.py           # Hash/name resolution utilities
     commands/
+        accounts.py      # account management and sync
         auth.py          # config and whoami commands
         crawlers.py      # crawler browsing
+        delivery.py      # delivery configuration
         squid.py         # squid management
         task.py          # task management
         run.py           # run lifecycle

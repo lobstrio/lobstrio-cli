@@ -73,3 +73,9 @@ app.registered_commands.extend(go_app.registered_commands)
 
 from lobstr_cli.commands.results import results_app
 app.add_typer(results_app, name="results", help="Result fetching")
+
+from lobstr_cli.commands.accounts import accounts_app
+app.add_typer(accounts_app, name="accounts", help="Account management")
+
+from lobstr_cli.commands.delivery import delivery_app
+app.add_typer(delivery_app, name="delivery", help="Delivery configuration")
