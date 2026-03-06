@@ -29,31 +29,75 @@ def match_hash_prefix(prefix: str, items: list[dict], key: str = "id") -> str:
     raise SystemExit(1)
 
 
+def match_slug(slug: str, items: list[dict], label: str = "squid") -> str:
+    """Match by slug field: exact first, then prefix, error on ambiguous."""
+    lower = slug.lower()
+    # Exact slug match
+    for item in items:
+        if item.get("slug", "").lower() == lower:
+            return item["id"]
+    # Prefix slug match
+    matches = [item for item in items if item.get("slug", "").lower().startswith(lower)]
+    if len(matches) == 1:
+        return matches[0]["id"]
+    if len(matches) == 0:
+        print_error(f"No {label} matching slug '{slug}'")
+        raise SystemExit(1)
+    names = [m.get("slug", m.get("name", "")) for m in matches[:5]]
+    print_error(f"Ambiguous {label} slug '{slug}' matches: {', '.join(names)}")
+    raise SystemExit(1)
+
+
+def match_name(name: str, items: list[dict], label: str = "squid") -> str:
+    """Match by name: exact first, then substring, error on ambiguous."""
+    lower = name.lower()
+    for item in items:
+        if item.get("name", "").lower() == lower:
+            return item["id"]
+    matches = [item for item in items if lower in item.get("name", "").lower()]
+    if len(matches) == 1:
+        return matches[0]["id"]
+    if len(matches) == 0:
+        print_error(f"No {label} matching '{name}'")
+        raise SystemExit(1)
+    names = [m["name"] for m in matches[:5]]
+    print_error(f"Ambiguous {label} name '{name}' matches: {', '.join(names)}")
+    raise SystemExit(1)
+
+
 def resolve_squid(client, identifier: str) -> str:
-    """Resolve a squid alias or hash prefix to a full squid ID."""
+    """Resolve a squid by alias, hash, or name."""
     from lobstr_cli.config import resolve_alias
     identifier = resolve_alias(identifier)
     all_squids = client.get("/squids")
     items = all_squids.get("data", [])
-    return match_hash_prefix(identifier, items)
+    # 1. Hash: if all hex chars, try hash prefix match
+    if all(c in "0123456789abcdef" for c in identifier.lower()):
+        try:
+            return match_hash_prefix(identifier.lower(), items)
+        except SystemExit:
+            pass
+    # 2. Name: fallback to name match
+    return match_name(identifier, items, "squid")
 
 
 def match_crawler_name(name: str, crawlers: list[dict]) -> str:
-    lower = name.lower()
-    # Exact match first
-    for c in crawlers:
-        if c["name"].lower() == lower:
-            return c["id"]
-    # Substring match
-    matches = [c for c in crawlers if lower in c["name"].lower()]
-    if len(matches) == 1:
-        return matches[0]["id"]
-    if len(matches) == 0:
-        print_error(f"No crawler matching '{name}'")
-        raise SystemExit(1)
-    names = [m["name"] for m in matches[:5]]
-    print_error(f"Ambiguous name '{name}' matches: {', '.join(names)}")
-    raise SystemExit(1)
+    return match_name(name, crawlers, "crawler")
+
+
+def resolve_crawler(identifier: str, crawlers: list[dict]) -> str:
+    """Resolve a crawler by hash, slug, or name."""
+    # 1. Hash: if all hex chars, try hash prefix match
+    if all(c in "0123456789abcdef" for c in identifier.lower()):
+        try:
+            return match_hash_prefix(identifier.lower(), crawlers)
+        except SystemExit:
+            pass
+    # 2. Slug: if contains dashes, try slug match
+    if "-" in identifier:
+        return match_slug(identifier, crawlers, "crawler")
+    # 3. Name: fallback to name match
+    return match_crawler_name(identifier, crawlers)
 
 
 def parse_param_value(value: str):
@@ -82,13 +126,3 @@ def parse_params(param_list: list[str]) -> dict:
     return params
 
 
-def resolve_crawler(identifier: str, crawlers: list[dict]) -> str:
-    """Resolve a crawler identifier that could be a hash, prefix, or name."""
-    # If it looks like a hex hash/prefix, try hash matching first
-    if all(c in "0123456789abcdef" for c in identifier.lower()):
-        try:
-            return match_hash_prefix(identifier.lower(), crawlers)
-        except SystemExit:
-            pass
-    # Fall back to name matching
-    return match_crawler_name(identifier, crawlers)

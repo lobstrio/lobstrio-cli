@@ -1,8 +1,12 @@
 import pytest
+from unittest.mock import MagicMock
 from lobstr_cli.resolve import (
     match_hash_prefix,
+    match_slug,
+    match_name,
     match_crawler_name,
     resolve_crawler,
+    resolve_squid,
     parse_param_value,
     parse_params,
     require_full_hash,
@@ -51,6 +55,138 @@ class TestMatchHashPrefix:
         items = [{"id": f"abc{i:03d}"} for i in range(10)]
         with pytest.raises(SystemExit):
             match_hash_prefix("abc", items)
+
+
+# --- match_slug ---
+
+class TestMatchSlug:
+    def test_exact_slug(self):
+        items = [
+            {"id": "s1", "slug": "google-maps-leads-scraper", "name": "Google Maps Leads Scraper"},
+            {"id": "s2", "slug": "linkedin-profile-scraper", "name": "LinkedIn Profile Scraper"},
+        ]
+        assert match_slug("google-maps-leads-scraper", items) == "s1"
+
+    def test_slug_prefix(self):
+        items = [
+            {"id": "s1", "slug": "google-maps-leads-scraper", "name": "Google Maps Leads Scraper"},
+            {"id": "s2", "slug": "linkedin-profile-scraper", "name": "LinkedIn Profile Scraper"},
+        ]
+        assert match_slug("google-maps", items) == "s1"
+
+    def test_ambiguous_slug(self):
+        items = [
+            {"id": "s1", "slug": "google-maps-leads", "name": "Google Maps Leads"},
+            {"id": "s2", "slug": "google-maps-reviews", "name": "Google Maps Reviews"},
+        ]
+        with pytest.raises(SystemExit):
+            match_slug("google-maps", items)
+
+    def test_no_match(self):
+        items = [{"id": "s1", "slug": "google-maps-leads", "name": "Google Maps Leads"}]
+        with pytest.raises(SystemExit):
+            match_slug("facebook-ads", items)
+
+    def test_empty_list(self):
+        with pytest.raises(SystemExit):
+            match_slug("anything", [])
+
+    def test_exact_wins_over_prefix(self):
+        items = [
+            {"id": "s1", "slug": "google-maps", "name": "Google Maps"},
+            {"id": "s2", "slug": "google-maps-leads-scraper", "name": "Google Maps Leads Scraper"},
+        ]
+        assert match_slug("google-maps", items) == "s1"
+
+    def test_case_insensitive(self):
+        items = [{"id": "s1", "slug": "google-maps-leads", "name": "Google Maps Leads"}]
+        assert match_slug("Google-Maps-Leads", items) == "s1"
+
+
+# --- match_name ---
+
+class TestMatchName:
+    def test_exact_match(self):
+        items = [{"id": "s1", "name": "My Leads"}, {"id": "s2", "name": "My Reviews"}]
+        assert match_name("My Leads", items) == "s1"
+
+    def test_case_insensitive(self):
+        items = [{"id": "s1", "name": "My Leads Scraper"}]
+        assert match_name("my leads scraper", items) == "s1"
+
+    def test_substring_match(self):
+        items = [{"id": "s1", "name": "Google Maps Leads"}, {"id": "s2", "name": "LinkedIn Profiles"}]
+        assert match_name("maps leads", items) == "s1"
+
+    def test_ambiguous_name(self):
+        items = [{"id": "s1", "name": "Maps Leads"}, {"id": "s2", "name": "Maps Reviews"}]
+        with pytest.raises(SystemExit):
+            match_name("Maps", items)
+
+    def test_no_match(self):
+        items = [{"id": "s1", "name": "My Leads"}]
+        with pytest.raises(SystemExit):
+            match_name("facebook", items)
+
+    def test_empty_list(self):
+        with pytest.raises(SystemExit):
+            match_name("anything", [])
+
+    def test_exact_wins_over_substring(self):
+        items = [{"id": "s1", "name": "Maps"}, {"id": "s2", "name": "Google Maps Leads"}]
+        assert match_name("Maps", items) == "s1"
+
+
+# --- resolve_squid ---
+
+class TestResolveSquid:
+    def _mock_client(self, squids):
+        mock = MagicMock()
+        mock.get.return_value = {"data": squids}
+        return mock
+
+    def test_resolve_by_hash_prefix(self):
+        client = self._mock_client([{"id": "abc123def456", "name": "My Scraper"}])
+        assert resolve_squid(client, "abc123") == "abc123def456"
+
+    def test_resolve_by_exact_name(self):
+        client = self._mock_client([
+            {"id": "s1", "name": "Maps"},
+            {"id": "s2", "name": "Google Maps Leads"},
+        ])
+        assert resolve_squid(client, "Maps") == "s1"
+
+    def test_resolve_by_name_substring(self):
+        client = self._mock_client([{"id": "s1", "name": "My Leads Scraper"}])
+        assert resolve_squid(client, "My Leads") == "s1"
+
+    def test_resolve_name_case_insensitive(self):
+        client = self._mock_client([{"id": "s1", "name": "My Leads"}])
+        assert resolve_squid(client, "my leads") == "s1"
+
+    def test_resolve_alias(self):
+        client = self._mock_client([{"id": "abc123def456", "name": "Scraper"}])
+        from unittest.mock import patch
+        with patch("lobstr_cli.config.resolve_alias", return_value="abc123def456"):
+            assert resolve_squid(client, "@maps") == "abc123def456"
+
+    def test_hash_first_priority(self):
+        """Pure hex input should try hash before name."""
+        client = self._mock_client([{"id": "deadbeef1234", "name": "Other"}])
+        assert resolve_squid(client, "deadbeef") == "deadbeef1234"
+
+    def test_no_match_raises(self):
+        client = self._mock_client([{"id": "abc123", "name": "My Scraper"}])
+        with pytest.raises(SystemExit):
+            resolve_squid(client, "nonexistent")
+
+    def test_ambiguous_name_raises(self):
+        client = self._mock_client([
+            {"id": "s1", "name": "Google Maps Leads"},
+            {"id": "s2", "name": "Google Maps Reviews"},
+        ])
+        with pytest.raises(SystemExit):
+            resolve_squid(client, "Google Maps")
 
 
 # --- match_crawler_name ---
@@ -104,30 +240,36 @@ class TestMatchCrawlerName:
 class TestResolveCrawler:
     def test_resolve_by_hash(self):
         crawlers = [
-            {"id": "abc123def456", "name": "Some Crawler"},
-            {"id": "def789abc012", "name": "Other Crawler"},
+            {"id": "abc123def456", "name": "Some Crawler", "slug": "some-crawler"},
+            {"id": "def789abc012", "name": "Other Crawler", "slug": "other-crawler"},
         ]
         assert resolve_crawler("abc123", crawlers) == "abc123def456"
 
-    def test_resolve_by_name(self):
+    def test_resolve_by_slug(self):
+        crawlers = [{"id": "c1", "name": "Google Maps Leads Scraper", "slug": "google-maps-leads-scraper"}]
+        assert resolve_crawler("google-maps-leads-scraper", crawlers) == "c1"
+
+    def test_resolve_by_slug_prefix(self):
         crawlers = [
-            {"id": "abc123def456", "name": "Google Maps Leads Scraper"},
+            {"id": "c1", "name": "Google Maps Leads Scraper", "slug": "google-maps-leads-scraper"},
+            {"id": "c2", "name": "LinkedIn Profile Scraper", "slug": "linkedin-profile-scraper"},
         ]
+        assert resolve_crawler("google-maps", crawlers) == "c1"
+
+    def test_resolve_by_name(self):
+        crawlers = [{"id": "abc123def456", "name": "Google Maps Leads Scraper", "slug": "google-maps-leads-scraper"}]
         assert resolve_crawler("Google Maps", crawlers) == "abc123def456"
 
     def test_hash_fallback_to_name(self):
-        """Non-hex string should go straight to name matching."""
-        crawlers = [{"id": "abc123", "name": "My Scraper"}]
+        crawlers = [{"id": "abc123", "name": "My Scraper", "slug": "my-scraper"}]
         assert resolve_crawler("My Scraper", crawlers) == "abc123"
 
-    def test_hex_like_name_tries_hash_first(self):
-        """Pure hex string that doesn't match hash falls back to name."""
-        crawlers = [{"id": "xyz789", "name": "deadbeef"}]
-        # "deadbeef" is valid hex, tries hash first (fails), then name
+    def test_hex_like_tries_hash_first(self):
+        crawlers = [{"id": "xyz789", "name": "deadbeef", "slug": "deadbeef"}]
         assert resolve_crawler("deadbeef", crawlers) == "xyz789"
 
     def test_resolve_full_hash(self):
-        crawlers = [{"id": "abc123def456789012345678", "name": "Crawler"}]
+        crawlers = [{"id": "abc123def456789012345678", "name": "Crawler", "slug": "crawler"}]
         assert resolve_crawler("abc123def456789012345678", crawlers) == "abc123def456789012345678"
 
 
