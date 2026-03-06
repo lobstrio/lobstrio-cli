@@ -51,8 +51,7 @@ def print_info(message: str) -> None:
 def print_table(columns: list[str], rows: list[list[str]], title: str | None = None) -> None:
     table = Table(title=title, show_lines=False)
     for col in columns:
-        # Hash columns should never be truncated so users can copy them
-        if col == "Hash":
+        if col in ("Hash", "Name", "Slug"):
             table.add_column(col, no_wrap=True)
         else:
             table.add_column(col)
