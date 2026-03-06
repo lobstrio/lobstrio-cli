@@ -84,6 +84,22 @@ Open an issue at [github.com/lobstrio/lobstrio-cli/issues](https://github.com/lo
 - Steps to reproduce
 - CLI version (`lobstr --version`)
 
+## Versioning
+
+We follow [Semantic Versioning](https://semver.org/) (`MAJOR.MINOR.PATCH`):
+
+| Bump | When | Examples |
+|------|------|----------|
+| **PATCH** (`0.1.0` → `0.1.1`) | Bug fixes, typo corrections, small tweaks — no new features, nothing breaking | Fix crash on empty results, fix typo in help text |
+| **MINOR** (`0.1.0` → `0.2.0`) | New features, new commands, new options — backwards compatible | Add `crawlers show` command, add slug resolution |
+| **MAJOR** (`0.2.0` → `1.0.0`) | Breaking changes — renamed/removed commands, changed output format, changed config format | Rename `squid` to `scraper`, change JSON output schema |
+
+While the major version is `0` (pre-1.0), the API is not considered stable and minor bumps may include small breaking changes.
+
+When bumping the version:
+1. Update `version` in `pyproject.toml`
+2. Add a new section at the top of `CHANGELOG.md` with the date and changes
+
 ## Pull requests
 
 - Keep PRs focused on a single change
