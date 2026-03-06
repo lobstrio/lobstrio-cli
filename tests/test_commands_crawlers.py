@@ -79,8 +79,29 @@ class TestCrawlersLs:
 
 
 class TestCrawlersShow:
+    CRAWLER_DETAIL = {
+        "id": "abc123def456",
+        "name": "Google Maps Leads Scraper",
+        "slug": "google-maps-leads-scraper",
+        "credits_per_row": {"current": 3},
+        "max_concurrency": 5,
+        "account": None,
+        "has_issues": False,
+        "is_available": True,
+        "is_premium": False,
+        "input": [
+            {"name": "url", "level": "task", "type": "string", "required": "true", "default": ""},
+        ],
+        "result": ["name", "address", "phone"],
+    }
+
+    def _get_resp(self, path, **kw):
+        if path == "/crawlers":
+            return SAMPLE_CRAWLERS
+        return self.CRAWLER_DETAIL
+
     def test_show_by_slug(self):
-        mock = _mock_client(lambda path, **kw: SAMPLE_CRAWLERS)
+        mock = _mock_client(self._get_resp)
         with patch("lobstr_cli.cli.get_client", return_value=mock):
             result = runner.invoke(app, ["crawlers", "show", "google-maps-leads-scraper"])
         assert result.exit_code == 0
@@ -88,18 +109,37 @@ class TestCrawlersShow:
         assert "google-maps-leads-scraper" in result.output
 
     def test_show_by_name(self):
-        mock = _mock_client(lambda path, **kw: SAMPLE_CRAWLERS)
+        def get_resp(path, **kw):
+            if path == "/crawlers":
+                return SAMPLE_CRAWLERS
+            return {**self.CRAWLER_DETAIL, "id": "def789abc012", "name": "LinkedIn Profile Scraper", "slug": "linkedin-profile-scraper"}
+        mock = _mock_client(get_resp)
         with patch("lobstr_cli.cli.get_client", return_value=mock):
             result = runner.invoke(app, ["crawlers", "show", "LinkedIn Profile"])
         assert result.exit_code == 0
         assert "LinkedIn Profile Scraper" in result.output
 
     def test_show_json(self):
-        mock = _mock_client(lambda path, **kw: SAMPLE_CRAWLERS)
+        mock = _mock_client(self._get_resp)
         with patch("lobstr_cli.cli.get_client", return_value=mock):
             result = runner.invoke(app, ["--json", "crawlers", "show", "google-maps-leads-scraper"])
         assert result.exit_code == 0
         assert "abc123def456" in result.output
+
+    def test_show_displays_input_params(self):
+        mock = _mock_client(self._get_resp)
+        with patch("lobstr_cli.cli.get_client", return_value=mock):
+            result = runner.invoke(app, ["crawlers", "show", "google-maps-leads-scraper"])
+        assert result.exit_code == 0
+        assert "url" in result.output
+
+    def test_show_displays_result_fields(self):
+        mock = _mock_client(self._get_resp)
+        with patch("lobstr_cli.cli.get_client", return_value=mock):
+            result = runner.invoke(app, ["crawlers", "show", "google-maps-leads-scraper"])
+        assert result.exit_code == 0
+        assert "phone" in result.output
+        assert "name, address, phone" in result.output
 
 
 class TestCrawlersSearch:

@@ -51,7 +51,8 @@ def show_crawler(crawler: str = typer.Argument(..., help="Crawler slug, hash, or
     all_crawlers = client.get("/crawlers")
     items = all_crawlers.get("data", all_crawlers) if isinstance(all_crawlers, dict) else all_crawlers
     crawler_id = resolve_crawler(crawler, items)
-    data = next(c for c in items if c["id"] == crawler_id)
+    # Fetch full detail from dedicated endpoint
+    data = client.get(f"/crawlers/{crawler_id}")
     if _state.get("json"):
         print_json(data)
         return
@@ -101,7 +102,27 @@ def show_crawler(crawler: str = typer.Argument(..., help="Crawler slug, hash, or
             ("Success Ratio", ews.get("success_ratio")),
             ("Rate (min-max)", f"{ews.get('min_rate_per_worker', '?')}-{ews.get('max_rate_per_worker', '?')}"),
         ]))
+    # Result fields from dedicated endpoint
+    result_fields = data.get("result", [])
+    if result_fields:
+        sections.append(("Result Fields", [
+            ("Fields", ", ".join(result_fields)),
+        ]))
     print_detail_grouped(sections)
+    # Input parameters from dedicated endpoint (separate table)
+    inputs = data.get("input", [])
+    if inputs:
+        print_info("\nInput Parameters:")
+        input_rows = []
+        for inp in inputs:
+            input_rows.append([
+                inp.get("name", ""),
+                inp.get("level", ""),
+                inp.get("type", ""),
+                "yes" if inp.get("required") == "true" else "no",
+                str(inp.get("default", "")),
+            ])
+        print_table(["Name", "Level", "Type", "Required", "Default"], input_rows)
 
 
 @crawlers_app.command("params")
@@ -139,8 +160,6 @@ def crawler_params(crawler: str = typer.Argument(..., help="Crawler hash or pref
         print_info("\nSquid-level parameters:")
         rows = []
         for name, spec in squid_params.items():
-            if name == "functions":
-                continue
             allowed = ", ".join(str(v) for v in spec["allowed"]) if isinstance(spec.get("allowed"), list) else ""
             rows.append([
                 name,
