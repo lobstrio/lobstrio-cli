@@ -40,14 +40,14 @@ class TestResultsGet:
     def test_get_json_format(self):
         mock = _mock_client(self._get_resp)
         with patch("lobstr_cli.cli.get_client", return_value=mock):
-            result = runner.invoke(app, ["results", "get", "squid1"])
+            result = runner.invoke(app, ["results", "get", "My Squid"])
         assert result.exit_code == 0
         assert "https://a.com" in result.output
 
     def test_get_csv_format(self):
         mock = _mock_client(self._get_resp)
         with patch("lobstr_cli.cli.get_client", return_value=mock):
-            result = runner.invoke(app, ["results", "get", "squid1", "--format", "csv"])
+            result = runner.invoke(app, ["results", "get", "My Squid", "--format", "csv"])
         assert result.exit_code == 0
         assert "url" in result.output
 
@@ -55,7 +55,7 @@ class TestResultsGet:
         out_file = tmp_path / "out.json"
         mock = _mock_client(self._get_resp)
         with patch("lobstr_cli.cli.get_client", return_value=mock):
-            result = runner.invoke(app, ["results", "get", "squid1", "--output", str(out_file)])
+            result = runner.invoke(app, ["results", "get", "My Squid", "--output", str(out_file)])
         assert result.exit_code == 0
         assert out_file.exists()
         data = json.loads(out_file.read_text())
@@ -65,7 +65,7 @@ class TestResultsGet:
         out_file = tmp_path / "out.csv"
         mock = _mock_client(self._get_resp)
         with patch("lobstr_cli.cli.get_client", return_value=mock):
-            result = runner.invoke(app, ["results", "get", "squid1", "--format", "csv", "--output", str(out_file)])
+            result = runner.invoke(app, ["results", "get", "My Squid", "--format", "csv", "--output", str(out_file)])
         assert result.exit_code == 0
         assert out_file.exists()
         content = out_file.read_text()
@@ -79,13 +79,13 @@ class TestResultsGet:
             return {"data": []}
         mock = _mock_client(get_resp)
         with patch("lobstr_cli.cli.get_client", return_value=mock):
-            result = runner.invoke(app, ["results", "get", "squid1", "--format", "csv"])
+            result = runner.invoke(app, ["results", "get", "My Squid", "--format", "csv"])
         assert result.exit_code == 0
 
     def test_get_with_pagination(self):
         mock = _mock_client(self._get_resp)
         with patch("lobstr_cli.cli.get_client", return_value=mock):
-            result = runner.invoke(app, ["results", "get", "squid1", "--page", "2", "--page-size", "10"])
+            result = runner.invoke(app, ["results", "get", "My Squid", "--page", "2", "--page-size", "10"])
         assert result.exit_code == 0
         # Check params passed to API
         calls = mock.get.call_args_list

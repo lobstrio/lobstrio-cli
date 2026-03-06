@@ -35,14 +35,14 @@ class TestRunStart:
     def test_start_run(self):
         mock = _mock_client(post_resp={"id": FULL_RUN_HASH, "status": "running"})
         with patch("lobstr_cli.cli.get_client", return_value=mock):
-            result = runner.invoke(app, ["run", "start", "squid1"])
+            result = runner.invoke(app, ["run", "start", "My Squid"])
         assert result.exit_code == 0
         assert "Started" in result.output
 
     def test_start_json_mode(self):
         mock = _mock_client(post_resp={"id": FULL_RUN_HASH, "status": "running"})
         with patch("lobstr_cli.cli.get_client", return_value=mock):
-            result = runner.invoke(app, ["--json", "run", "start", "squid1"])
+            result = runner.invoke(app, ["--json", "run", "start", "My Squid"])
         assert result.exit_code == 0
         assert FULL_RUN_HASH in result.output
 
@@ -58,7 +58,7 @@ class TestRunLs:
             ]}
         mock = _mock_client(get_resp=get_resp)
         with patch("lobstr_cli.cli.get_client", return_value=mock):
-            result = runner.invoke(app, ["run", "ls", "squid1"])
+            result = runner.invoke(app, ["run", "ls", "My Squid"])
         assert result.exit_code == 0
         assert "finis" in result.output
 
@@ -72,7 +72,7 @@ class TestRunLs:
             ]}
         mock = _mock_client(get_resp=get_resp)
         with patch("lobstr_cli.cli.get_client", return_value=mock):
-            result = runner.invoke(app, ["run", "ls", "squid1"])
+            result = runner.invoke(app, ["run", "ls", "My Squid"])
         assert result.exit_code == 0
 
 

@@ -9,7 +9,7 @@ runner = CliRunner()
 
 CRAWLERS = {
     "data": [
-        {"id": "crawler1", "name": "Google Maps Leads Scraper"},
+        {"id": "crawler1", "name": "Google Maps Leads Scraper", "slug": "google-maps-leads-scraper"},
     ]
 }
 
@@ -65,6 +65,26 @@ class TestSquidCreate:
         assert result.exit_code == 0
         assert "newsquid123" in result.output
 
+    def test_create_by_crawler_slug(self):
+        """Resolve crawler by slug when creating squid."""
+        mock = _mock_client(lambda path, **kw: CRAWLERS)
+        mock.post.return_value = {"id": "newsquid123", "name": "New Squid"}
+        with patch("lobstr_cli.cli.get_client", return_value=mock):
+            result = runner.invoke(app, ["squid", "create", "google-maps-leads-scraper"])
+        assert result.exit_code == 0
+        assert "Created" in result.output
+        call_json = mock.post.call_args[1]["json"]
+        assert call_json["crawler"] == "crawler1"
+
+    def test_create_by_crawler_slug_prefix(self):
+        """Resolve crawler by slug prefix when creating squid."""
+        mock = _mock_client(lambda path, **kw: CRAWLERS)
+        mock.post.return_value = {"id": "newsquid123", "name": "New Squid"}
+        with patch("lobstr_cli.cli.get_client", return_value=mock):
+            result = runner.invoke(app, ["squid", "create", "google-maps"])
+        assert result.exit_code == 0
+        assert "Created" in result.output
+
 
 class TestSquidLs:
     def test_list_squids(self):
@@ -92,29 +112,56 @@ class TestSquidLs:
 
 
 class TestSquidShow:
-    def test_show_squid(self):
+    SQUID_DETAIL = {
+        "id": "squid1abc123def456",
+        "name": "My Squid",
+        "crawler_name": "Google Maps",
+        "is_active": True,
+        "is_ready": True,
+        "concurrency": 3,
+        "to_complete": False,
+        "last_run_status": "finished",
+        "last_run_at": "2025-01-01",
+        "total_runs": 5,
+        "export_unique_results": True,
+        "params": {"max_results": 100},
+    }
+
+    def test_show_by_name(self):
         def get_side_effect(path, **kw):
             if path == "/squids":
                 return SQUIDS
-            return {
-                "id": "squid1abc123def456",
-                "name": "My Squid",
-                "crawler_name": "Google Maps",
-                "is_active": True,
-                "is_ready": True,
-                "concurrency": 3,
-                "to_complete": False,
-                "last_run_status": "finished",
-                "last_run_at": "2025-01-01",
-                "total_runs": 5,
-                "export_unique_results": True,
-                "params": {"max_results": 100},
-            }
+            return self.SQUID_DETAIL
         mock = _mock_client(get_side_effect)
         with patch("lobstr_cli.cli.get_client", return_value=mock):
-            result = runner.invoke(app, ["squid", "show", "squid1"])
+            result = runner.invoke(app, ["squid", "show", "My Squid"])
         assert result.exit_code == 0
         assert "My Squid" in result.output
+
+    def test_show_by_name_substring(self):
+        """Unique substring should resolve."""
+        def get_side_effect(path, **kw):
+            if path == "/squids":
+                return SQUIDS
+            return self.SQUID_DETAIL
+        mock = _mock_client(get_side_effect)
+        with patch("lobstr_cli.cli.get_client", return_value=mock):
+            result = runner.invoke(app, ["squid", "show", "Squid"])
+        assert result.exit_code == 0
+
+    def test_show_by_hash_prefix(self):
+        """Hex prefix should resolve via hash matching."""
+        squids = {"data": [
+            {"id": "aabb11cc22dd33ee44ff5566", "name": "My Squid", "crawler_name": "Google Maps"},
+        ]}
+        def get_side_effect(path, **kw):
+            if path == "/squids":
+                return squids
+            return {**self.SQUID_DETAIL, "id": "aabb11cc22dd33ee44ff5566"}
+        mock = _mock_client(get_side_effect)
+        with patch("lobstr_cli.cli.get_client", return_value=mock):
+            result = runner.invoke(app, ["squid", "show", "aabb11"])
+        assert result.exit_code == 0
 
 
 class TestSquidUpdate:
@@ -122,7 +169,7 @@ class TestSquidUpdate:
         mock = _mock_client(lambda path, **kw: SQUIDS)
         mock.post.return_value = {"id": "squid1abc123def456"}
         with patch("lobstr_cli.cli.get_client", return_value=mock):
-            result = runner.invoke(app, ["squid", "update", "squid1", "--concurrency", "5"])
+            result = runner.invoke(app, ["squid", "update", "My Squid", "--concurrency", "5"])
         assert result.exit_code == 0
         call_json = mock.post.call_args[1]["json"]
         assert call_json["concurrency"] == 5
@@ -131,7 +178,7 @@ class TestSquidUpdate:
         mock = _mock_client(lambda path, **kw: SQUIDS)
         mock.post.return_value = {"id": "squid1abc123def456"}
         with patch("lobstr_cli.cli.get_client", return_value=mock):
-            result = runner.invoke(app, ["squid", "update", "squid1", "--param", "max_results=200"])
+            result = runner.invoke(app, ["squid", "update", "My Squid", "--param", "max_results=200"])
         assert result.exit_code == 0
         call_json = mock.post.call_args[1]["json"]
         assert call_json["params"]["max_results"] == 200
@@ -139,7 +186,7 @@ class TestSquidUpdate:
     def test_update_no_options_error(self):
         mock = _mock_client(lambda path, **kw: SQUIDS)
         with patch("lobstr_cli.cli.get_client", return_value=mock):
-            result = runner.invoke(app, ["squid", "update", "squid1"])
+            result = runner.invoke(app, ["squid", "update", "My Squid"])
         assert result.exit_code == 1
 
 
@@ -148,7 +195,7 @@ class TestSquidEmpty:
         mock = _mock_client(lambda path, **kw: SQUIDS)
         mock.post.return_value = {"deleted_count": 10}
         with patch("lobstr_cli.cli.get_client", return_value=mock):
-            result = runner.invoke(app, ["squid", "empty", "squid1"])
+            result = runner.invoke(app, ["squid", "empty", "My Squid"])
         assert result.exit_code == 0
         assert "10" in result.output
 
@@ -157,18 +204,18 @@ class TestSquidRm:
     def test_delete_with_force(self):
         mock = _mock_client(lambda path, **kw: SQUIDS)
         with patch("lobstr_cli.cli.get_client", return_value=mock):
-            result = runner.invoke(app, ["squid", "rm", "squid1", "--force"])
+            result = runner.invoke(app, ["squid", "rm", "My Squid", "--force"])
         assert result.exit_code == 0
         assert "Deleted" in result.output
 
     def test_delete_without_force_prompts(self):
         mock = _mock_client(lambda path, **kw: SQUIDS)
         with patch("lobstr_cli.cli.get_client", return_value=mock):
-            result = runner.invoke(app, ["squid", "rm", "squid1"], input="y\n")
+            result = runner.invoke(app, ["squid", "rm", "My Squid"], input="y\n")
         assert result.exit_code == 0
 
     def test_delete_aborted(self):
         mock = _mock_client(lambda path, **kw: SQUIDS)
         with patch("lobstr_cli.cli.get_client", return_value=mock):
-            result = runner.invoke(app, ["squid", "rm", "squid1"], input="n\n")
+            result = runner.invoke(app, ["squid", "rm", "My Squid"], input="n\n")
         assert result.exit_code != 0

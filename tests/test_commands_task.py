@@ -37,7 +37,7 @@ class TestTaskAdd:
             post_resp={"tasks": [{"id": "t1"}, {"id": "t2"}], "duplicated_count": 0}
         )
         with patch("lobstr_cli.cli.get_client", return_value=mock):
-            result = runner.invoke(app, ["task", "add", "squid1", "https://a.com", "https://b.com"])
+            result = runner.invoke(app, ["task", "add", "My Squid", "https://a.com", "https://b.com"])
         assert result.exit_code == 0
         assert "Added 2 tasks" in result.output
 
@@ -46,7 +46,7 @@ class TestTaskAdd:
             post_resp={"tasks": [{"id": "t1"}], "duplicated_count": 0}
         )
         with patch("lobstr_cli.cli.get_client", return_value=mock):
-            result = runner.invoke(app, ["task", "add", "squid1", "pizza nyc", "--key", "keyword"])
+            result = runner.invoke(app, ["task", "add", "My Squid", "pizza nyc", "--key", "keyword"])
         assert result.exit_code == 0
         call_json = mock.post.call_args[1]["json"]
         assert call_json["tasks"] == [{"keyword": "pizza nyc"}]
@@ -56,7 +56,7 @@ class TestTaskAdd:
             post_resp={"tasks": [{"id": "t1"}], "duplicated_count": 3}
         )
         with patch("lobstr_cli.cli.get_client", return_value=mock):
-            result = runner.invoke(app, ["task", "add", "squid1", "https://a.com"])
+            result = runner.invoke(app, ["task", "add", "My Squid", "https://a.com"])
         assert result.exit_code == 0
         assert "3 duplicates" in result.output
 
@@ -65,7 +65,7 @@ class TestTaskAdd:
             post_resp={"tasks": [{"id": "t1"}], "duplicated_count": 0}
         )
         with patch("lobstr_cli.cli.get_client", return_value=mock):
-            result = runner.invoke(app, ["--json", "task", "add", "squid1", "https://a.com"])
+            result = runner.invoke(app, ["--json", "task", "add", "My Squid", "https://a.com"])
         assert result.exit_code == 0
 
 
@@ -79,7 +79,7 @@ class TestTaskLs:
             ]}
         mock = _mock_client(get_resp=get_resp)
         with patch("lobstr_cli.cli.get_client", return_value=mock):
-            result = runner.invoke(app, ["task", "ls", "squid1"])
+            result = runner.invoke(app, ["task", "ls", "My Squid"])
         assert result.exit_code == 0
         assert "https://a.com" in result.output
 
@@ -90,7 +90,7 @@ class TestTaskLs:
             return {"data": []}
         mock = _mock_client(get_resp=get_resp)
         with patch("lobstr_cli.cli.get_client", return_value=mock):
-            result = runner.invoke(app, ["task", "ls", "squid1", "--limit", "10", "--page", "3"])
+            result = runner.invoke(app, ["task", "ls", "My Squid", "--limit", "10", "--page", "3"])
         assert result.exit_code == 0
 
 
@@ -138,7 +138,7 @@ class TestTaskUpload:
         csv_file.write_text("url\nhttps://a.com\nhttps://b.com\n")
         mock = _mock_client(post_resp={"id": "upload123"})
         with patch("lobstr_cli.cli.get_client", return_value=mock):
-            result = runner.invoke(app, ["task", "upload", "squid1", str(csv_file)])
+            result = runner.invoke(app, ["task", "upload", "My Squid", str(csv_file)])
         assert result.exit_code == 0
         assert "upload123" in result.output
 
