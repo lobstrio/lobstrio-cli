@@ -2,4 +2,4 @@
 
 from importlib.metadata import version
 
-__version__ = version("lobstrio-cli")
+__version__ = version("lobstrio")

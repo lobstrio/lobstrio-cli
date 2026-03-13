@@ -32,7 +32,7 @@ class TestGlobalFlags:
     def test_json_flag_sets_state(self):
         with patch("lobstr_cli.cli.get_token", return_value="t"):
             result = runner.invoke(app, ["--json", "--version"])
-        # Version exits early, but state was set
+        assert result.exit_code == 0
 
     def test_verbose_flag(self):
         result = runner.invoke(app, ["--verbose", "--version"])
@@ -60,12 +60,6 @@ class TestGetClient:
         mock_client = MagicMock()
         _state["client"] = mock_client
         assert get_client() is mock_client
-
-    def test_verbose_passed_to_client(self):
-        _state["verbose"] = True
-        with patch("lobstr_cli.cli.get_token", return_value="test-token"):
-            client = get_client()
-        assert client.verbose is True
 
 
 class TestSubcommands:

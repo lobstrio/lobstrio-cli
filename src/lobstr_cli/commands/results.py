@@ -23,19 +23,18 @@ def get_results(
     client = get_client()
     squid_id = resolve_squid(client, squid)
 
-    data = client.get("/results", params={"squid": squid_id, "page": page, "page_size": page_size})
+    results = client.results.list(squid=squid_id, page=page, page_size=page_size)
 
     if _state.get("json") or format == "json":
         if output:
             with open(output, "w") as f:
-                json.dump(data, f, indent=2, default=str)
+                json.dump(results, f, indent=2, default=str)
             print_info(f"Saved to {output}")
         else:
-            print_json(data)
+            print_json(results)
         return
 
     # CSV format
-    results = data.get("data", [])
     if not results:
         print_info("No results found.")
         return

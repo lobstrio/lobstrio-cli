@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import asdict
 from typing import Optional
 import typer
 
@@ -19,15 +20,14 @@ def configure_email(
     from lobstr_cli.cli import get_client, _state
     client = get_client()
     squid_id = _resolve_squid(client, squid)
-    body = {"email": email, "notifications": notifications}
-    result = client.post("/delivery", json=body, params={"squid": squid_id})
+    result = client.delivery.email(squid_id, email=email, notifications=notifications)
     if _state.get("json"):
-        print_json(result)
+        print_json(asdict(result))
         return
     print_success(f"Email delivery configured for {squid_id[:12]}")
     print_detail([
-        ("Email", result.get("email")),
-        ("Notifications", result.get("notifications")),
+        ("Email", result.email),
+        ("Notifications", result.notifications),
     ])
 
 
@@ -42,17 +42,15 @@ def configure_googlesheet(
     from lobstr_cli.cli import get_client, _state
     client = get_client()
     squid_id = _resolve_squid(client, squid)
-    body = {"google_sheet_fields": {"url": url, "append": append, "is_active": active}}
-    result = client.post("/delivery", json=body, params={"squid": squid_id})
+    result = client.delivery.google_sheet(squid_id, url=url, append=append, is_active=active)
     if _state.get("json"):
-        print_json(result)
+        print_json(asdict(result))
         return
-    gs = result.get("google_sheet_fields", result)
     print_success(f"Google Sheet delivery configured for {squid_id[:12]}")
     print_detail([
-        ("URL", gs.get("url")),
-        ("Append", gs.get("append")),
-        ("Active", gs.get("is_active")),
+        ("URL", result.url),
+        ("Append", result.append),
+        ("Active", result.is_active),
     ])
 
 
@@ -69,22 +67,18 @@ def configure_s3(
     from lobstr_cli.cli import get_client, _state
     client = get_client()
     squid_id = _resolve_squid(client, squid)
-    fields: dict = {"bucket": bucket, "target_path": target_path, "is_active": active}
-    if aws_access_key:
-        fields["aws_access_key"] = aws_access_key
-    if aws_secret_key:
-        fields["aws_secret_key"] = aws_secret_key
-    body = {"s3_fields": fields}
-    result = client.post("/delivery", json=body, params={"squid": squid_id})
+    result = client.delivery.s3(
+        squid_id, bucket=bucket, target_path=target_path,
+        aws_access_key=aws_access_key, aws_secret_key=aws_secret_key, is_active=active,
+    )
     if _state.get("json"):
-        print_json(result)
+        print_json(asdict(result))
         return
-    s3 = result.get("s3_fields", result)
     print_success(f"S3 delivery configured for {squid_id[:12]}")
     print_detail([
-        ("Bucket", s3.get("bucket")),
-        ("Target Path", s3.get("target_path")),
-        ("Active", s3.get("is_active")),
+        ("Bucket", result.bucket),
+        ("Target Path", result.target_path),
+        ("Active", result.is_active),
     ])
 
 
@@ -103,27 +97,18 @@ def configure_webhook(
     from lobstr_cli.cli import get_client, _state
     client = get_client()
     squid_id = _resolve_squid(client, squid)
-    body = {"webhook_fields": {
-        "url": url,
-        "is_active": active,
-        "retry": retry,
-        "events": {
-            "run.running": on_running,
-            "run.paused": on_paused,
-            "run.done": on_done,
-            "run.error": on_error,
-        },
-    }}
-    result = client.post("/delivery", json=body, params={"squid": squid_id})
+    result = client.delivery.webhook(
+        squid_id, url=url, is_active=active, retry=retry,
+        on_running=on_running, on_paused=on_paused, on_done=on_done, on_error=on_error,
+    )
     if _state.get("json"):
-        print_json(result)
+        print_json(asdict(result))
         return
-    wh = result.get("webhook_fields", result)
     print_success(f"Webhook delivery configured for {squid_id[:12]}")
     print_detail([
-        ("URL", wh.get("url")),
-        ("Active", wh.get("is_active")),
-        ("Retry", wh.get("retry")),
+        ("URL", result.url),
+        ("Active", result.is_active),
+        ("Retry", result.retry),
     ])
 
 
@@ -141,26 +126,20 @@ def configure_sftp(
     from lobstr_cli.cli import get_client, _state
     client = get_client()
     squid_id = _resolve_squid(client, squid)
-    body = {"ftp_fields": {
-        "host": host,
-        "port": port,
-        "username": username,
-        "password": password,
-        "directory": directory,
-        "is_active": active,
-    }}
-    result = client.post("/delivery", json=body, params={"squid": squid_id})
+    result = client.delivery.sftp(
+        squid_id, host=host, port=port, username=username,
+        password=password, directory=directory, is_active=active,
+    )
     if _state.get("json"):
-        print_json(result)
+        print_json(asdict(result))
         return
-    ftp = result.get("ftp_fields", result)
     print_success(f"SFTP delivery configured for {squid_id[:12]}")
     print_detail([
-        ("Host", ftp.get("host")),
-        ("Port", ftp.get("port")),
-        ("Username", ftp.get("username")),
-        ("Directory", ftp.get("directory")),
-        ("Active", ftp.get("is_active")),
+        ("Host", result.host),
+        ("Port", result.port),
+        ("Username", result.username),
+        ("Directory", result.directory),
+        ("Active", result.is_active),
     ])
 
 
@@ -172,7 +151,7 @@ def test_email(email: str = typer.Option(..., "--email", help="Email address to 
     """Test email delivery configuration."""
     from lobstr_cli.cli import get_client, _state
     client = get_client()
-    result = client.post("/delivery/test-email", json={"email": email})
+    result = client.delivery.test_email(email=email)
     if _state.get("json"):
         print_json(result)
         return
@@ -188,7 +167,7 @@ def test_googlesheet(url: str = typer.Option(..., "--url", help="Google Sheet UR
     """Test Google Sheet delivery configuration."""
     from lobstr_cli.cli import get_client, _state
     client = get_client()
-    result = client.post("/delivery/test-googlesheet", json={"url": url})
+    result = client.delivery.test_google_sheet(url=url)
     if _state.get("json"):
         print_json(result)
         return
@@ -208,12 +187,7 @@ def test_s3(
     """Test S3 delivery configuration."""
     from lobstr_cli.cli import get_client, _state
     client = get_client()
-    body: dict = {"bucket": bucket}
-    if aws_access_key:
-        body["aws_access_key"] = aws_access_key
-    if aws_secret_key:
-        body["aws_secret_key"] = aws_secret_key
-    result = client.post("/delivery/test-s3", json=body)
+    result = client.delivery.test_s3(bucket=bucket, aws_access_key=aws_access_key, aws_secret_key=aws_secret_key)
     if _state.get("json"):
         print_json(result)
         return
@@ -229,7 +203,7 @@ def test_webhook(url: str = typer.Option(..., "--url", help="Webhook URL to test
     """Test webhook delivery configuration."""
     from lobstr_cli.cli import get_client, _state
     client = get_client()
-    result = client.post("/delivery/test-webhook", json={"url": url})
+    result = client.delivery.test_webhook(url=url)
     if _state.get("json"):
         print_json(result)
         return
@@ -251,8 +225,9 @@ def test_sftp(
     """Test SFTP delivery configuration."""
     from lobstr_cli.cli import get_client, _state
     client = get_client()
-    body = {"host": host, "port": port, "username": username, "password": password, "directory": directory}
-    result = client.post("/delivery/test-sftp", json=body)
+    result = client.delivery.test_sftp(
+        host=host, port=port, username=username, password=password, directory=directory,
+    )
     if _state.get("json"):
         print_json(result)
         return

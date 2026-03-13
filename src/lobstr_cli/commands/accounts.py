@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json as json_mod
+from dataclasses import asdict
 from pathlib import Path
 from typing import Optional
 import typer
@@ -16,19 +17,18 @@ def list_accounts():
     """List your accounts."""
     from lobstr_cli.cli import get_client, _state
     client = get_client()
-    data = client.get("/accounts")
+    items = client.accounts.list()
     if _state.get("json"):
-        print_json(data)
+        print_json([asdict(a) for a in items])
         return
-    items = data.get("data", [])
     rows = []
     for a in items:
         rows.append([
-            a.get("username", ""),
-            a.get("id", "")[:12],
-            a.get("type", ""),
-            a.get("status_code_info", ""),
-            a.get("last_synchronization_time", "")[:10] if a.get("last_synchronization_time") else "—",
+            a.username,
+            a.id[:12],
+            a.type,
+            a.status_code_info or "",
+            (a.last_synchronization_time or "")[:10] or "—",
         ])
     print_table(["Username", "Hash", "Type", "Status", "Last Sync"], rows)
 
@@ -39,24 +39,21 @@ def show_account(account: str = typer.Argument(..., help="Account hash or userna
     from lobstr_cli.cli import get_client, _state
     client = get_client()
     account_id = _resolve_account(client, account)
-    resp = client.get(f"/accounts/{account_id}")
-    # API returns paginated {"data": [...]} even for single account
-    data = resp["data"][0] if isinstance(resp, dict) and "data" in resp else resp
+    data = client.accounts.get(account_id)
     if _state.get("json"):
-        print_json(data)
+        print_json(asdict(data))
         return
-    squids = data.get("squids", [])
-    squid_names = ", ".join(s.get("name", "") for s in squids) if squids else "—"
+    squid_names = ", ".join(s.get("name", "") for s in data.squids) if data.squids else "—"
     print_detail([
-        ("Username", data.get("username")),
-        ("Hash", data.get("id")),
-        ("Type", data.get("type")),
-        ("Status", data.get("status_code_info")),
-        ("Status Detail", data.get("status_code_description")),
-        ("Base URL", data.get("baseurl")),
-        ("Created", data.get("created_at")),
-        ("Last Sync", data.get("last_synchronization_time")),
-        ("Updated", data.get("updated_at")),
+        ("Username", data.username),
+        ("Hash", data.id),
+        ("Type", data.type),
+        ("Status", data.status_code_info),
+        ("Status Detail", data.status_code_description),
+        ("Base URL", data.baseurl),
+        ("Created", data.created_at),
+        ("Last Sync", data.last_synchronization_time),
+        ("Updated", data.updated_at),
         ("Squids", squid_names),
     ])
 
@@ -72,7 +69,7 @@ def delete_account(
     account_id = _resolve_account(client, account)
     if not force:
         typer.confirm(f"Delete account {account_id[:12]}? This is permanent.", abort=True)
-    result = client.delete(f"/accounts/{account_id}")
+    result = client.accounts.delete(account_id)
     if _state.get("json"):
         print_json(result)
         return
@@ -84,19 +81,17 @@ def list_account_types():
     """List available account types."""
     from lobstr_cli.cli import get_client, _state
     client = get_client()
-    data = client.get("/account_types")
+    items = client.accounts.types()
     if _state.get("json"):
-        print_json(data)
+        print_json([asdict(t) for t in items])
         return
-    items = data if isinstance(data, list) else data.get("data", [])
     rows = []
     for t in items:
-        cookies = t.get("cookies", [])
-        cookie_names = ", ".join(c.get("name", "") for c in cookies) if cookies else "all session cookies"
+        cookie_names = ", ".join(c.get("name", "") for c in t.cookies) if t.cookies else "all session cookies"
         rows.append([
-            t.get("name", ""),
-            t.get("domain", ""),
-            t.get("baseurl", ""),
+            t.name,
+            t.domain,
+            t.baseurl,
             cookie_names[:50],
         ])
     print_table(["Type", "Domain", "Base URL", "Required Cookies"], rows)
@@ -134,10 +129,7 @@ def sync_account(
     from lobstr_cli.cli import get_client, _state
     client = get_client()
     cookies = _parse_cookies(cookie, cookies_json, cookies_file)
-    body: dict = {"type": type, "cookies": cookies}
-    if account:
-        body["account"] = account
-    result = client.post("/accounts/cookies", json=body)
+    result = client.accounts.sync(type, cookies, account=account)
     if _state.get("json"):
         print_json(result)
         return
@@ -151,15 +143,15 @@ def sync_status(sync_id: str = typer.Argument(..., help="Sync task ID")):
     """Check account sync status."""
     from lobstr_cli.cli import get_client, _state
     client = get_client()
-    result = client.get(f"/synchronize/{sync_id}")
+    result = client.accounts.sync_status(sync_id)
     if _state.get("json"):
-        print_json(result)
+        print_json(asdict(result))
         return
     print_detail([
-        ("Sync ID", result.get("id")),
-        ("Status Code", result.get("status_code")),
-        ("Status", result.get("status_text")),
-        ("Account Hash", result.get("account_hash")),
+        ("Sync ID", result.id),
+        ("Status Code", result.status_code),
+        ("Status", result.status_text),
+        ("Account Hash", result.account_hash),
     ])
 
 
@@ -177,8 +169,7 @@ def update_account(
         print_error("No params specified. Use --param to set limits (e.g. --param batch=20)")
         raise typer.Exit(1)
     from lobstr_cli.resolve import parse_params
-    body = {"account": account_id, "type": type, "params": parse_params(param)}
-    result = client.post("/accounts", json=body)
+    result = client.accounts.update(account_id, type=type, params=parse_params(param))
     if _state.get("json"):
         print_json(result)
         return

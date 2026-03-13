@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import asdict
 from pathlib import Path
 from typing import Optional
 import typer
@@ -21,13 +22,11 @@ def add_tasks(
     client = get_client()
     squid_id = _resolve_squid(client, squid)
     tasks = [{key: v} for v in values]
-    result = client.post("/tasks", json={"squid": squid_id, "tasks": tasks})
+    result = client.tasks.add(squid=squid_id, tasks=tasks)
     if _state.get("json"):
-        print_json(result)
+        print_json(asdict(result))
         return
-    created = result.get("tasks", [])
-    dupes = result.get("duplicated_count", 0)
-    print_success(f"Added {len(created)} tasks ({dupes} duplicates skipped)")
+    print_success(f"Added {len(result.tasks)} tasks ({result.duplicated_count} duplicates skipped)")
 
 
 @task_app.command("upload")
@@ -39,8 +38,7 @@ def upload_tasks(
     from lobstr_cli.cli import get_client, _state
     client = get_client()
     squid_id = _resolve_squid(client, squid)
-    with open(file, "rb") as f:
-        result = client.post("/tasks/upload", data={"squid": squid_id}, files={"file": (file.name, f)})
+    result = client.tasks.upload(squid=squid_id, file=file)
     if _state.get("json"):
         print_json(result)
         return
@@ -54,17 +52,16 @@ def upload_status(upload_id: str = typer.Argument(..., help="Upload task ID")):
     """Check upload progress."""
     from lobstr_cli.cli import get_client, _state
     client = get_client()
-    result = client.get(f"/tasks/upload/{upload_id}")
+    result = client.tasks.upload_status(upload_id)
     if _state.get("json"):
-        print_json(result)
+        print_json(asdict(result))
         return
-    meta = result.get("meta", {})
     print_detail([
-        ("State", result.get("state")),
-        ("Valid", meta.get("valid")),
-        ("Inserted", meta.get("inserted")),
-        ("Duplicates", meta.get("duplicates")),
-        ("Invalid", meta.get("invalid")),
+        ("State", result.state),
+        ("Valid", result.meta.valid),
+        ("Inserted", result.meta.inserted),
+        ("Duplicates", result.meta.duplicates),
+        ("Invalid", result.meta.invalid),
     ])
 
 
@@ -78,20 +75,18 @@ def list_tasks(
     from lobstr_cli.cli import get_client, _state
     client = get_client()
     squid_id = _resolve_squid(client, squid)
-    data = client.get("/tasks", params={"squid": squid_id, "limit": limit, "page": page})
+    items = client.tasks.list(squid=squid_id, limit=limit, page=page)
     if _state.get("json"):
-        print_json(data)
+        print_json([asdict(t) for t in items])
         return
-    items = data.get("data", [])
     rows = []
     for t in items:
-        params = t.get("params", {})
-        url = params.get("url", str(params)[:60])
+        url = t.params.get("url", str(t.params)[:60])
         rows.append([
-            t.get("id", ""),
-            "yes" if t.get("is_active") else "no",
+            t.id,
+            "yes" if t.is_active else "no",
             str(url)[:70],
-            t.get("created_at", "")[:10],
+            (t.created_at or "")[:10],
         ])
     print_table(["Hash", "Active", "URL/Params", "Created"], rows)
 
@@ -102,26 +97,23 @@ def show_task(task_id: str = typer.Argument(..., help="Full task hash")):
     from lobstr_cli.cli import get_client, _state
     client = get_client()
     require_full_hash(task_id, "task")
-    data = client.get(f"/tasks/{task_id}")
+    data = client.tasks.get(task_id)
     if _state.get("json"):
-        print_json(data)
+        print_json(asdict(data))
         return
-    status = data.get("status", {})
     fields = [
-        ("Hash", data.get("hash_value")),
-        ("Active", data.get("is_active")),
+        ("Hash", data.id),
+        ("Active", data.is_active),
     ]
-    if isinstance(status, dict):
+    if data.status:
         fields.extend([
-            ("Status", status.get("status")),
-            ("Results", status.get("total_results")),
-            ("Pages", status.get("total_pages")),
-            ("Done Reason", status.get("done_reason")),
-            ("Errors", status.get("has_errors")),
+            ("Status", data.status.status),
+            ("Results", data.status.total_results),
+            ("Pages", data.status.total_pages),
+            ("Done Reason", data.status.done_reason),
+            ("Errors", data.status.has_errors),
         ])
-    else:
-        fields.append(("Status", status[0] if isinstance(status, list) and status else status))
-    fields.append(("Params", data.get("params")))
+    fields.append(("Params", data.params))
     print_detail(fields)
 
 
@@ -131,7 +123,7 @@ def delete_task(task_id: str = typer.Argument(..., help="Full task hash")):
     from lobstr_cli.cli import get_client, _state
     client = get_client()
     require_full_hash(task_id, "task")
-    result = client.delete(f"/tasks/{task_id}")
+    result = client.tasks.delete(task_id)
     if _state.get("json"):
         print_json(result)
         return

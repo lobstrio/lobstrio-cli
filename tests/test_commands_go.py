@@ -1,17 +1,25 @@
 import pytest
-from unittest.mock import patch, MagicMock, call
+from unittest.mock import patch, MagicMock
 from typer.testing import CliRunner
 
 from lobstr_cli.cli import app, _state
+from lobstrio.models.crawler import Crawler
+from lobstrio.models.squid import Squid
+from lobstrio.models.task import Task, AddTasksResult
+from lobstrio.models.run import Run, RunStats
 
 
 runner = CliRunner()
 
-CRAWLERS = {
-    "data": [
-        {"id": "crawler1abc", "name": "Google Maps Leads Scraper"},
-    ]
-}
+CRAWLERS = [
+    Crawler(
+        id="crawler1abc", name="Google Maps Leads Scraper",
+        slug="google-maps-leads-scraper", description=None,
+        credits_per_row=3, credits_per_email=None, max_concurrency=5,
+        account=False, has_email_verification=False, is_public=True,
+        is_premium=False, is_available=True, has_issues=False, rank=1,
+    ),
+]
 
 
 @pytest.fixture(autouse=True)
@@ -24,43 +32,45 @@ def clean_state():
 def _mock_client(squids_by_name=None):
     """Create a mock client for go command tests."""
     mock = MagicMock()
+    mock.crawlers.list.return_value = CRAWLERS
+    mock.squids.list.return_value = squids_by_name or []
+    mock.squids.create.return_value = Squid(
+        id="newsquid123", name="Test Squid", crawler="crawler1abc",
+        crawler_name="Google Maps Leads Scraper", is_active=True, is_ready=False,
+        concurrency=1, to_complete=None, last_run_status=None,
+        last_run_at=None, total_runs=0, export_unique_results=False,
+        params={},
+    )
+    mock.squids.update.return_value = None
+    mock.squids.empty.return_value = {"deleted_count": 0}
+    mock.squids.delete.return_value = {}
 
-    def get_side_effect(path, **kw):
-        if path == "/crawlers":
-            return CRAWLERS
-        if path == "/squids":
-            if squids_by_name:
-                return {"data": squids_by_name}
-            return {"data": []}
-        if "/stats" in path:
-            return {
-                "total_tasks": 1, "total_tasks_done": 1,
-                "is_done": True, "percent_done": "100%", "eta": "0s",
-            }
-        if "/download" in path:
-            return {"s3": "https://s3.example.com/results.csv"}
-        if path.startswith("/runs/"):
-            return {
-                "id": "run123", "status": "finished",
-                "total_results": 10, "duration": 30, "credit_used": 5,
-            }
-        return {}
+    def _make_add_result(*, squid, tasks):
+        return AddTasksResult(
+            tasks=[Task(id=f"t{i}", is_active=True, params=t, status=None, created_at=None)
+                   for i, t in enumerate(tasks)],
+            duplicated_count=0,
+        )
+    mock.tasks.add.side_effect = _make_add_result
 
-    mock.get.side_effect = get_side_effect
-
-    def post_side_effect(path, **kw):
-        if path == "/squids":
-            return {"id": "newsquid123", "name": "Test Squid"}
-        if path == "/tasks":
-            tasks = kw.get("json", {}).get("tasks", [])
-            return {"tasks": [{"id": f"t{i}"} for i in range(len(tasks))], "duplicated_count": 0}
-        if path == "/runs":
-            return {"id": "run123"}
-        return {}
-
-    mock.post.side_effect = post_side_effect
-    mock.download.return_value = None
-    mock.delete.return_value = {}
+    mock.runs.start.return_value = Run(
+        id="run123", status="running", total_results=0,
+        total_unique_results=0, duration=0, credit_used=0,
+        origin="api", done_reason=None, done_reason_desc=None,
+        export_done=False, started_at=None, ended_at=None,
+    )
+    mock.runs.stats.return_value = RunStats(
+        percent_done="100%", total_tasks=1, total_tasks_done=1,
+        total_tasks_left=0, total_results=10, duration=30,
+        eta="0s", current_task=None, is_done=True,
+    )
+    mock.runs.get.return_value = Run(
+        id="run123", status="finished", total_results=10,
+        total_unique_results=10, duration=30, credit_used=5,
+        origin="api", done_reason="completed", done_reason_desc=None,
+        export_done=True, started_at=None, ended_at=None,
+    )
+    mock.runs.download.return_value = None
     return mock
 
 
@@ -91,10 +101,7 @@ class TestGoKey:
         with patch("lobstr_cli.cli.get_client", return_value=mock):
             result = runner.invoke(app, ["go", "Google Maps", "pizza", "--key", "keyword"])
         assert result.exit_code == 0
-        # Verify tasks were created with keyword key
-        post_calls = mock.post.call_args_list
-        tasks_call = [c for c in post_calls if c[0][0] == "/tasks"][0]
-        assert tasks_call[1]["json"]["tasks"] == [{"keyword": "pizza"}]
+        mock.tasks.add.assert_called_once_with(squid="newsquid123", tasks=[{"keyword": "pizza"}])
 
 
 class TestGoFile:
@@ -105,9 +112,8 @@ class TestGoFile:
         with patch("lobstr_cli.cli.get_client", return_value=mock):
             result = runner.invoke(app, ["go", "Google Maps", "--file", str(f)])
         assert result.exit_code == 0
-        post_calls = mock.post.call_args_list
-        tasks_call = [c for c in post_calls if c[0][0] == "/tasks"][0]
-        tasks = tasks_call[1]["json"]["tasks"]
+        call_args = mock.tasks.add.call_args
+        tasks = call_args[1]["tasks"]
         assert len(tasks) == 2  # comment and empty line filtered
 
 
@@ -117,7 +123,7 @@ class TestGoNoDownload:
         with patch("lobstr_cli.cli.get_client", return_value=mock):
             result = runner.invoke(app, ["go", "Google Maps", "https://a.com", "--no-download"])
         assert result.exit_code == 0
-        mock.download.assert_not_called()
+        mock.runs.download.assert_not_called()
 
 
 class TestGoDelete:
@@ -126,33 +132,42 @@ class TestGoDelete:
         with patch("lobstr_cli.cli.get_client", return_value=mock):
             result = runner.invoke(app, ["go", "Google Maps", "https://a.com", "--delete"])
         assert result.exit_code == 0
-        # Verify squid was deleted
-        delete_calls = mock.delete.call_args_list
-        assert any("/squids/" in str(c) for c in delete_calls)
+        mock.squids.delete.assert_called_once()
 
 
 class TestGoReuse:
     def test_reuse_existing_squid(self):
-        existing = [{"id": "existing123", "name": "MyScraper", "crawler": "crawler1abc"}]
+        existing = [
+            Squid(
+                id="existing123", name="MyScraper", crawler="crawler1abc",
+                crawler_name="Google Maps", is_active=True, is_ready=True,
+                concurrency=1, to_complete=None, last_run_status=None,
+                last_run_at=None, total_runs=0, export_unique_results=False,
+                params={},
+            ),
+        ]
         mock = _mock_client(squids_by_name=existing)
         with patch("lobstr_cli.cli.get_client", return_value=mock):
             result = runner.invoke(app, ["go", "Google Maps", "https://a.com", "--name", "MyScraper"])
         assert result.exit_code == 0
         # Should NOT have created a new squid
-        post_calls = mock.post.call_args_list
-        squid_create = [c for c in post_calls if c[0][0] == "/squids" and len(c[0][0]) == len("/squids")]
-        assert len(squid_create) == 0
+        mock.squids.create.assert_not_called()
 
     def test_reuse_with_empty(self):
-        existing = [{"id": "existing123", "name": "MyScraper", "crawler": "crawler1abc"}]
+        existing = [
+            Squid(
+                id="existing123", name="MyScraper", crawler="crawler1abc",
+                crawler_name="Google Maps", is_active=True, is_ready=True,
+                concurrency=1, to_complete=None, last_run_status=None,
+                last_run_at=None, total_runs=0, export_unique_results=False,
+                params={},
+            ),
+        ]
         mock = _mock_client(squids_by_name=existing)
         with patch("lobstr_cli.cli.get_client", return_value=mock):
             result = runner.invoke(app, ["go", "Google Maps", "https://a.com", "--name", "MyScraper", "--empty"])
         assert result.exit_code == 0
-        # Verify empty was called
-        post_calls = mock.post.call_args_list
-        empty_calls = [c for c in post_calls if "/empty" in str(c)]
-        assert len(empty_calls) == 1
+        mock.squids.empty.assert_called_once()
 
 
 class TestGoParams:
@@ -162,10 +177,7 @@ class TestGoParams:
             result = runner.invoke(app, ["go", "Google Maps", "https://a.com",
                                          "--param", "max_results=200", "--param", "language=English"])
         assert result.exit_code == 0
-        # Verify params were sent to squid update
-        post_calls = mock.post.call_args_list
-        update_calls = [c for c in post_calls if "/squids/" in str(c) and "/empty" not in str(c)]
-        assert len(update_calls) >= 1
+        mock.squids.update.assert_called_once()
 
     def test_concurrency(self):
         mock = _mock_client()
@@ -177,20 +189,8 @@ class TestGoParams:
 class TestGoCleanup:
     def test_cleanup_orphaned_squid_on_error(self):
         mock = _mock_client()
-        # Make task creation fail
-        original_post = mock.post.side_effect
-        call_count = [0]
-
-        def failing_post(path, **kw):
-            call_count[0] += 1
-            if path == "/tasks":
-                raise Exception("Task creation failed")
-            return original_post(path, **kw)
-
-        mock.post.side_effect = failing_post
+        mock.tasks.add.side_effect = Exception("Task creation failed")
         with patch("lobstr_cli.cli.get_client", return_value=mock):
             result = runner.invoke(app, ["go", "Google Maps", "https://a.com"])
         assert result.exit_code != 0
-        # Verify cleanup was attempted
-        delete_calls = mock.delete.call_args_list
-        assert len(delete_calls) >= 1
+        mock.squids.delete.assert_called_once()

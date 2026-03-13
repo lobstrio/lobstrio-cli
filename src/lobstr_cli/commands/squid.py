@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import asdict
 from typing import Optional
 import typer
 
@@ -17,19 +18,14 @@ def create_squid(
     """Create a new squid for a crawler."""
     from lobstr_cli.cli import get_client, _state
     client = get_client()
-    # Resolve crawler
-    all_crawlers = client.get("/crawlers")
-    items = all_crawlers.get("data", all_crawlers) if isinstance(all_crawlers, dict) else all_crawlers
+    all_crawlers = client.crawlers.list()
     from lobstr_cli.resolve import resolve_crawler
-    crawler_id = resolve_crawler(crawler, items)
-    body: dict = {"crawler": crawler_id}
-    if name:
-        body["name"] = name
-    result = client.post("/squids", json=body)
+    crawler_id = resolve_crawler(crawler, all_crawlers)
+    result = client.squids.create(crawler_id, name=name)
     if _state.get("json"):
-        print_json(result)
+        print_json(asdict(result))
         return
-    print_success(f"Created squid: {result.get('name')} ({result.get('id', '')[:12]})")
+    print_success(f"Created squid: {result.name} ({result.id[:12]})")
 
 
 @squid_app.command("ls")
@@ -41,23 +37,19 @@ def list_squids(
     """List your squids."""
     from lobstr_cli.cli import get_client, _state
     client = get_client()
-    params = {"limit": limit, "page": page}
-    if name:
-        params["name"] = name
-    data = client.get("/squids", params=params)
+    items = client.squids.list(limit=limit, page=page, name=name)
     if _state.get("json"):
-        print_json(data)
+        print_json([asdict(s) for s in items])
         return
-    items = data.get("data", [])
     rows = []
     for s in items:
         rows.append([
-            s.get("name", ""),
-            s.get("id", "")[:12],
-            s.get("crawler_name", ""),
-            "yes" if s.get("to_complete") else "no",
-            s.get("last_run_status", "") or "—",
-            str(s.get("concurrency", 1)),
+            s.name,
+            s.id[:12],
+            s.crawler_name,
+            "yes" if s.to_complete else "no",
+            s.last_run_status or "—",
+            str(s.concurrency),
         ])
     print_table(["Name", "Hash", "Crawler", "Pending", "Last Run", "Conc."], rows)
 
@@ -68,23 +60,23 @@ def show_squid(squid: str = typer.Argument(..., help="Squid hash or prefix")):
     from lobstr_cli.cli import get_client, _state
     client = get_client()
     squid_id = _resolve_squid(client, squid)
-    data = client.get(f"/squids/{squid_id}")
+    data = client.squids.get(squid_id)
     if _state.get("json"):
-        print_json(data)
+        print_json(asdict(data))
         return
     print_detail([
-        ("Name", data.get("name")),
-        ("Hash", data.get("id")),
-        ("Crawler", data.get("crawler_name")),
-        ("Active", data.get("is_active")),
-        ("Ready", data.get("is_ready")),
-        ("Concurrency", data.get("concurrency")),
-        ("Pending Tasks", data.get("to_complete")),
-        ("Last Run", data.get("last_run_status")),
-        ("Last Run At", data.get("last_run_at")),
-        ("Total Runs", data.get("total_runs")),
-        ("Unique Results", data.get("export_unique_results")),
-        ("Params", data.get("params")),
+        ("Name", data.name),
+        ("Hash", data.id),
+        ("Crawler", data.crawler_name),
+        ("Active", data.is_active),
+        ("Ready", data.is_ready),
+        ("Concurrency", data.concurrency),
+        ("Pending Tasks", data.to_complete),
+        ("Last Run", data.last_run_status),
+        ("Last Run At", data.last_run_at),
+        ("Total Runs", data.total_runs),
+        ("Unique Results", data.export_unique_results),
+        ("Params", data.params),
     ])
 
 
@@ -101,24 +93,24 @@ def update_squid(
     from lobstr_cli.cli import get_client, _state
     client = get_client()
     squid_id = _resolve_squid(client, squid)
-    body: dict = {}
+    kwargs: dict = {}
     if concurrency is not None:
-        body["concurrency"] = concurrency
+        kwargs["concurrency"] = concurrency
     if name is not None:
-        body["name"] = name
+        kwargs["name"] = name
     if notify is not None:
-        body["run_notify"] = None if notify == "null" else notify
+        kwargs["run_notify"] = None if notify == "null" else notify
     if unique_results is not None:
-        body["export_unique_results"] = unique_results
+        kwargs["export_unique_results"] = unique_results
     if param:
         from lobstr_cli.resolve import parse_params
-        body["params"] = parse_params(param)
-    if not body:
+        kwargs["params"] = parse_params(param)
+    if not kwargs:
         print_error("No options specified. Use --help to see available options.")
         raise typer.Exit(1)
-    result = client.post(f"/squids/{squid_id}", json=body)
+    result = client.squids.update(squid_id, **kwargs)
     if _state.get("json"):
-        print_json(result)
+        print_json(asdict(result))
         return
     print_success(f"Updated squid {squid_id[:12]}")
 
@@ -132,7 +124,7 @@ def empty_squid(
     from lobstr_cli.cli import get_client, _state
     client = get_client()
     squid_id = _resolve_squid(client, squid)
-    result = client.post(f"/squids/{squid_id}/empty", json={"type": type})
+    result = client.squids.empty(squid_id, type=type)
     if _state.get("json"):
         print_json(result)
         return
@@ -150,7 +142,7 @@ def delete_squid(
     squid_id = _resolve_squid(client, squid)
     if not force:
         typer.confirm(f"Delete squid {squid_id[:12]}? This is permanent.", abort=True)
-    result = client.delete(f"/squids/{squid_id}")
+    result = client.squids.delete(squid_id)
     if _state.get("json"):
         print_json(result)
         return

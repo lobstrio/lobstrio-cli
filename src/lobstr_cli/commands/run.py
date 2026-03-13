@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import time
+from dataclasses import asdict
 from typing import Optional
 import typer
 
@@ -13,33 +14,30 @@ from lobstr_cli.resolve import resolve_squid as _resolve_squid, require_full_has
 run_app = typer.Typer(no_args_is_help=True)
 
 
-def _poll_run(client, run_id: str, download_path: str | None = None) -> dict:
+def _poll_run(client, run_id: str, download_path: str | None = None):
     """Poll a run until completion, showing a progress bar."""
     with make_progress() as progress:
         task = progress.add_task("Running...", total=100)
         while True:
-            stats = client.get(f"/runs/{run_id}/stats")
-            total = stats.get("total_tasks", 0)
-            done = stats.get("total_tasks_done", 0)
-            is_done = stats.get("is_done", False)
-            pct_str = stats.get("percent_done", "0%").replace("%", "")
+            stats = client.runs.stats(run_id)
+            pct_str = stats.percent_done.replace("%", "")
             try:
                 pct = float(pct_str)
             except ValueError:
                 pct = 0
             progress.update(task, completed=pct, total=100,
-                          description=f"Running... {done}/{total} tasks  ETA: {stats.get('eta', '?')}")
-            if is_done:
+                          description=f"Running... {stats.total_tasks_done}/{stats.total_tasks} tasks  ETA: {stats.eta or '?'}")
+            if stats.is_done:
                 break
             time.sleep(3)
 
-    run = client.get(f"/runs/{run_id}")
+    run = client.runs.get(run_id)
     if download_path:
-        dl = client.get(f"/runs/{run_id}/download")
-        s3_url = dl.get("s3", "")
-        if s3_url:
-            client.download(s3_url, download_path)
+        try:
+            client.runs.download(run_id, download_path)
             print_success(f"Downloaded results to {download_path}")
+        except Exception:
+            print_error("No download URL available. Run may not have finished exporting.")
     return run
 
 
@@ -53,27 +51,26 @@ def start_run(
     from lobstr_cli.cli import get_client, _state
     client = get_client()
     squid_id = _resolve_squid(client, squid)
-    result = client.post("/runs", json={"squid": squid_id})
-    run_id = result.get("id", "")
+    result = client.runs.start(squid=squid_id)
     if _state.get("json") and not (wait or download):
-        print_json(result)
+        print_json(asdict(result))
         return
-    print_success(f"Started run {run_id}")
+    print_success(f"Started run {result.id}")
     if download or wait:
         try:
-            run = _poll_run(client, run_id, download_path=download)
+            run = _poll_run(client, result.id, download_path=download)
         except KeyboardInterrupt:
-            print_info(f"\nInterrupted. Resume with: lobstr run watch {run_id}")
+            print_info(f"\nInterrupted. Resume with: lobstr run watch {result.id}")
             raise typer.Exit(0)
         if _state.get("json"):
-            print_json(run)
+            print_json(asdict(run))
             return
         print_detail([
-            ("Status", run.get("status")),
-            ("Results", run.get("total_results")),
-            ("Duration", run.get("duration")),
-            ("Credits", run.get("credit_used")),
-            ("Done Reason", run.get("done_reason")),
+            ("Status", run.status),
+            ("Results", run.total_results),
+            ("Duration", run.duration),
+            ("Credits", run.credit_used),
+            ("Done Reason", run.done_reason),
         ])
 
 
@@ -87,22 +84,20 @@ def list_runs(
     from lobstr_cli.cli import get_client, _state
     client = get_client()
     squid_id = _resolve_squid(client, squid)
-    data = client.get("/runs", params={"squid": squid_id, "limit": limit, "page": page})
+    items = client.runs.list(squid=squid_id, limit=limit, page=page)
     if _state.get("json"):
-        print_json(data)
+        print_json([asdict(r) for r in items])
         return
-    items = data.get("data", [])
     rows = []
     for r in items:
-        duration = r.get("duration")
-        dur_str = f"{duration:.0f}s" if isinstance(duration, (int, float)) else str(duration or "—")
+        dur_str = f"{r.duration:.0f}s" if isinstance(r.duration, (int, float)) else str(r.duration or "—")
         rows.append([
-            r.get("id", ""),
-            r.get("status", ""),
-            str(r.get("total_results", "")),
+            r.id,
+            r.status,
+            str(r.total_results),
             dur_str,
-            str(r.get("credit_used", "")),
-            r.get("done_reason", "") or "—",
+            str(r.credit_used),
+            r.done_reason or "—",
         ])
     print_table(["Hash", "Status", "Results", "Duration", "Credits", "Reason"], rows)
 
@@ -113,23 +108,23 @@ def show_run(run_id: str = typer.Argument(..., help="Full run hash")):
     from lobstr_cli.cli import get_client, _state
     client = get_client()
     require_full_hash(run_id, "run")
-    data = client.get(f"/runs/{run_id}")
+    data = client.runs.get(run_id)
     if _state.get("json"):
-        print_json(data)
+        print_json(asdict(data))
         return
     print_detail([
-        ("Hash", data.get("id")),
-        ("Status", data.get("status")),
-        ("Results", data.get("total_results")),
-        ("Unique Results", data.get("total_unique_results")),
-        ("Duration", data.get("duration")),
-        ("Credits", data.get("credit_used")),
-        ("Origin", data.get("origin")),
-        ("Done Reason", data.get("done_reason")),
-        ("Done Reason Desc", data.get("done_reason_desc")),
-        ("Export Done", data.get("export_done")),
-        ("Started At", data.get("started_at")),
-        ("Ended At", data.get("ended_at")),
+        ("Hash", data.id),
+        ("Status", data.status),
+        ("Results", data.total_results),
+        ("Unique Results", data.total_unique_results),
+        ("Duration", data.duration),
+        ("Credits", data.credit_used),
+        ("Origin", data.origin),
+        ("Done Reason", data.done_reason),
+        ("Done Reason Desc", data.done_reason_desc),
+        ("Export Done", data.export_done),
+        ("Started At", data.started_at),
+        ("Ended At", data.ended_at),
     ])
 
 
@@ -139,18 +134,18 @@ def run_stats(run_id: str = typer.Argument(..., help="Full run hash")):
     from lobstr_cli.cli import get_client, _state
     client = get_client()
     require_full_hash(run_id, "run")
-    data = client.get(f"/runs/{run_id}/stats")
+    data = client.runs.stats(run_id)
     if _state.get("json"):
-        print_json(data)
+        print_json(asdict(data))
         return
     print_detail([
-        ("Percent Done", data.get("percent_done")),
-        ("Tasks", f"{data.get('total_tasks_done', 0)}/{data.get('total_tasks', 0)}"),
-        ("Tasks Left", data.get("total_tasks_left")),
-        ("Results", data.get("total_results")),
-        ("Duration", data.get("duration")),
-        ("ETA", data.get("eta")),
-        ("Current Task", data.get("current_task")),
+        ("Percent Done", data.percent_done),
+        ("Tasks", f"{data.total_tasks_done}/{data.total_tasks}"),
+        ("Tasks Left", data.total_tasks_left),
+        ("Results", data.total_results),
+        ("Duration", data.duration),
+        ("ETA", data.eta),
+        ("Current Task", data.current_task),
     ])
 
 
@@ -164,21 +159,22 @@ def run_tasks(
     from lobstr_cli.cli import get_client, _state
     client = get_client()
     require_full_hash(run_id, "run")
-    data = client.get("/runtasks", params={"run": run_id, "limit": limit, "page": page})
+    items = client.runs.tasks(run_id, limit=limit, page=page)
     if _state.get("json"):
-        print_json(data)
+        print_json([asdict(t) for t in items])
         return
-    items = data.get("data", [])
     rows = []
     for t in items:
-        params = t.get("params", {})
-        url = params.get("url", str(params)[:50])
+        url = t.params.get("url", str(t.params)[:50])
+        status = t.status.status if t.status else "—"
+        results = str(t.status.total_results) if t.status else ""
+        done_reason = (t.status.done_reason if t.status else None) or "—"
         rows.append([
-            t.get("id", ""),
-            t.get("status", ""),
-            str(t.get("total_results", "")),
+            t.id,
+            status,
+            results,
             str(url)[:60],
-            t.get("done_reason", "") or "—",
+            done_reason,
         ])
     print_table(["Hash", "Status", "Results", "URL/Params", "Reason"], rows)
 
@@ -189,7 +185,7 @@ def abort_run(run_id: str = typer.Argument(..., help="Full run hash")):
     from lobstr_cli.cli import get_client, _state
     client = get_client()
     require_full_hash(run_id, "run")
-    result = client.post(f"/runs/{run_id}/abort")
+    result = client.runs.abort(run_id)
     if _state.get("json"):
         print_json(result)
         return
@@ -205,15 +201,15 @@ def download_run(
     from lobstr_cli.cli import get_client, _state
     client = get_client()
     require_full_hash(run_id, "run")
-    dl = client.get(f"/runs/{run_id}/download")
     if _state.get("json"):
-        print_json(dl)
+        url = client.runs.download_url(run_id)
+        print_json({"s3": url})
         return
-    s3_url = dl.get("s3", "")
-    if not s3_url:
+    try:
+        client.runs.download(run_id, path)
+    except (KeyError, Exception):
         print_error("No download URL available. Run may not have finished exporting.")
         raise typer.Exit(1)
-    client.download(s3_url, path)
     print_success(f"Downloaded to {path}")
 
 
@@ -229,12 +225,12 @@ def watch_run(run_id: str = typer.Argument(..., help="Full run hash")):
         print_info("\nStopped watching.")
         raise typer.Exit(0)
     if _state.get("json"):
-        print_json(run)
+        print_json(asdict(run))
         return
     print_detail([
-        ("Status", run.get("status")),
-        ("Results", run.get("total_results")),
-        ("Duration", run.get("duration")),
-        ("Credits", run.get("credit_used")),
-        ("Done Reason", run.get("done_reason")),
+        ("Status", run.status),
+        ("Results", run.total_results),
+        ("Duration", run.duration),
+        ("Credits", run.credit_used),
+        ("Done Reason", run.done_reason),
     ])

@@ -3,6 +3,7 @@ from unittest.mock import patch, MagicMock
 from typer.testing import CliRunner
 
 from lobstr_cli.cli import app, _state
+from lobstrio.models.user import User, Balance
 
 
 runner = CliRunner()
@@ -69,21 +70,14 @@ class TestSetAlias:
 class TestWhoami:
     def _mock_client(self):
         mock = MagicMock()
-        mock.get.side_effect = lambda path, **kw: {
-            "/me": {
-                "first_name": "John",
-                "last_name": "Doe",
-                "email": "john@example.com",
-                "is_staff": False,
-                "plan": [{"name": "Pro", "status": "active"}],
-            },
-            "/user/balance": {
-                "available": 1000,
-                "consumed": 500,
-                "used_slots": 2,
-                "total_available_slots": 5,
-            },
-        }[path]
+        mock.me.return_value = User(
+            first_name="John", last_name="Doe",
+            email="john@example.com", is_staff=False,
+            plan=[{"name": "Pro", "status": "active"}],
+        )
+        mock.balance.return_value = Balance(
+            available=1000, consumed=500, used_slots=2, total_available_slots=5,
+        )
         return mock
 
     def test_whoami_display(self):
@@ -105,10 +99,10 @@ class TestWhoami:
 
     def test_whoami_no_plan(self):
         mock = MagicMock()
-        mock.get.side_effect = lambda path, **kw: {
-            "/me": {"first_name": "", "last_name": "", "email": "a@b.com", "plan": []},
-            "/user/balance": {"available": 0, "consumed": 0},
-        }[path]
+        mock.me.return_value = User(
+            first_name="", last_name="", email="a@b.com", is_staff=False, plan=[],
+        )
+        mock.balance.return_value = Balance(available=0, consumed=0, used_slots=0, total_available_slots=0)
         with patch("lobstr_cli.cli.get_client", return_value=mock):
             result = runner.invoke(app, ["whoami"])
         assert result.exit_code == 0

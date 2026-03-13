@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import asdict
 from typing import Optional
 import typer
 
@@ -13,30 +14,26 @@ def list_crawlers():
     """List all available crawlers."""
     from lobstr_cli.cli import get_client, _state
     client = get_client()
-    data = client.get("/crawlers")
-    items = data.get("data", data) if isinstance(data, dict) else data
+    crawlers = client.crawlers.list()
     if _state.get("json"):
-        print_json(data)
+        print_json([asdict(c) for c in crawlers])
         return
     rows = []
-    for c in items:
+    for c in crawlers:
         status = ""
-        if c.get("has_issues"):
+        if c.has_issues:
             status = "[yellow]issues[/]"
-        elif not c.get("is_available"):
+        elif not c.is_available:
             status = "[red]unavailable[/]"
-        elif c.get("is_premium"):
+        elif c.is_premium:
             status = "[cyan]premium[/]"
-        cpr = c.get("credits_per_row", "?")
-        if isinstance(cpr, dict):
-            cpr = cpr.get("current", cpr.get("legacy", "?"))
         rows.append([
-            c.get("name", ""),
-            c.get("slug", ""),
-            c.get("id", "")[:12],
-            str(cpr),
-            str(c.get("max_concurrency", "")),
-            "yes" if c.get("account") else "no",
+            c.name,
+            c.slug,
+            c.id[:12],
+            str(c.credits_per_row or "?"),
+            str(c.max_concurrency),
+            "yes" if c.account else "no",
             status,
         ])
     print_table(["Name", "Slug", "Hash", "Credits/Row", "Max Conc.", "Needs Account", "Status"], rows)
@@ -48,73 +45,61 @@ def show_crawler(crawler: str = typer.Argument(..., help="Crawler slug, hash, or
     from lobstr_cli.cli import get_client, _state
     from lobstr_cli.resolve import resolve_crawler
     client = get_client()
-    all_crawlers = client.get("/crawlers")
-    items = all_crawlers.get("data", all_crawlers) if isinstance(all_crawlers, dict) else all_crawlers
-    crawler_id = resolve_crawler(crawler, items)
-    # Fetch full detail from dedicated endpoint
-    data = client.get(f"/crawlers/{crawler_id}")
+    all_crawlers = client.crawlers.list()
+    crawler_id = resolve_crawler(crawler, all_crawlers)
+    data = client.crawlers.get(crawler_id)
     if _state.get("json"):
-        print_json(data)
+        print_json(asdict(data))
         return
-    cpr = data.get("credits_per_row", "?")
-    if isinstance(cpr, dict):
-        cpr = cpr.get("current", cpr.get("legacy", "?"))
     status = "available"
-    if data.get("has_issues"):
+    if data.has_issues:
         status = "issues"
-    elif not data.get("is_available"):
+    elif not data.is_available:
         status = "unavailable"
-    elif data.get("is_premium"):
+    elif data.is_premium:
         status = "premium"
-    cpe = data.get("credits_per_email", "?")
-    if isinstance(cpe, dict):
-        cpe = cpe.get("current", cpe.get("legacy", "?"))
     sections = [
         (None, [
-            ("Name", data.get("name")),
-            ("Slug", data.get("slug")),
-            ("Hash", data.get("id")),
-            ("Description", data.get("description")),
+            ("Name", data.name),
+            ("Slug", data.slug),
+            ("Hash", data.id),
+            ("Description", data.description),
             ("Status", status),
-            ("Rank", data.get("rank")),
+            ("Rank", data.rank),
         ]),
         ("Credits & Limits", [
-            ("Credits/Row", cpr),
-            ("Credits/Email", cpe),
-            ("Max Concurrency", data.get("max_concurrency")),
+            ("Credits/Row", data.credits_per_row),
+            ("Credits/Email", data.credits_per_email),
+            ("Max Concurrency", data.max_concurrency),
         ]),
         ("Flags", [
-            ("Needs Account", "yes" if data.get("account") else "no"),
-            ("Email Verification", data.get("has_email_verification")),
-            ("Public", data.get("is_public")),
-            ("Premium", data.get("is_premium")),
+            ("Needs Account", "yes" if data.account else "no"),
+            ("Email Verification", data.has_email_verification),
+            ("Public", data.is_public),
+            ("Premium", data.is_premium),
         ]),
     ]
-    ws = data.get("default_worker_stats")
+    ws = data.default_worker_stats
     if ws:
         sections.append(("Worker Stats", [
             ("Success Ratio", ws.get("success_ratio")),
             ("Rate (min-max)", f"{ws.get('min_rate_per_worker', '?')}-{ws.get('max_rate_per_worker', '?')}"),
         ]))
-    ews = data.get("email_worker_stats")
+    ews = data.email_worker_stats
     if ews:
         sections.append(("Email Worker Stats", [
             ("Success Ratio", ews.get("success_ratio")),
             ("Rate (min-max)", f"{ews.get('min_rate_per_worker', '?')}-{ews.get('max_rate_per_worker', '?')}"),
         ]))
-    # Result fields from dedicated endpoint
-    result_fields = data.get("result", [])
-    if result_fields:
+    if data.result_fields:
         sections.append(("Result Fields", [
-            ("Fields", ", ".join(result_fields)),
+            ("Fields", ", ".join(data.result_fields)),
         ]))
     print_detail_grouped(sections)
-    # Input parameters from dedicated endpoint (separate table)
-    inputs = data.get("input", [])
-    if inputs:
+    if data.input_params:
         print_info("\nInput Parameters:")
         input_rows = []
-        for inp in inputs:
+        for inp in data.input_params:
             input_rows.append([
                 inp.get("name", ""),
                 inp.get("level", ""),
@@ -131,20 +116,16 @@ def crawler_params(crawler: str = typer.Argument(..., help="Crawler hash or pref
     from lobstr_cli.cli import get_client, _state
     from lobstr_cli.resolve import resolve_crawler
     client = get_client()
-    # Resolve crawler
-    all_crawlers = client.get("/crawlers")
-    items = all_crawlers.get("data", all_crawlers) if isinstance(all_crawlers, dict) else all_crawlers
-    crawler_id = resolve_crawler(crawler, items)
-    data = client.get(f"/crawlers/{crawler_id}/params")
+    all_crawlers = client.crawlers.list()
+    crawler_id = resolve_crawler(crawler, all_crawlers)
+    params = client.crawlers.params(crawler_id)
     if _state.get("json"):
-        print_json(data)
+        print_json(asdict(params))
         return
-    # Task-level params
-    task_params = data.get("task", {})
-    if task_params:
+    if params.task_params:
         print_info("Task-level parameters:")
         rows = []
-        for name, spec in task_params.items():
+        for name, spec in params.task_params.items():
             rows.append([
                 name,
                 spec.get("type", ""),
@@ -153,13 +134,10 @@ def crawler_params(crawler: str = typer.Argument(..., help="Crawler hash or pref
                 spec.get("regex", ""),
             ])
         print_table(["Name", "Type", "Required", "Default", "Regex"], rows)
-    # Squid-level params
-    squid_params = data.get("squid", {})
-    funcs = squid_params.pop("functions", {}) if isinstance(squid_params, dict) else {}
-    if squid_params:
+    if params.squid_params:
         print_info("\nSquid-level parameters:")
         rows = []
-        for name, spec in squid_params.items():
+        for name, spec in params.squid_params.items():
             allowed = ", ".join(str(v) for v in spec["allowed"]) if isinstance(spec.get("allowed"), list) else ""
             rows.append([
                 name,
@@ -168,10 +146,10 @@ def crawler_params(crawler: str = typer.Argument(..., help="Crawler hash or pref
                 allowed[:50],
             ])
         print_table(["Name", "Default", "Required", "Allowed Values"], rows)
-    if funcs:
+    if params.functions:
         print_info("\nOptional functions (extra credits):")
         rows = []
-        for name, spec in funcs.items():
+        for name, spec in params.functions.items():
             cpf = spec.get("credits_per_function", "")
             if isinstance(cpf, dict):
                 cpf = cpf.get("current", cpf.get("legacy", ""))
@@ -184,20 +162,16 @@ def search_crawlers(keyword: str = typer.Argument(..., help="Search keyword")):
     """Search crawlers by name."""
     from lobstr_cli.cli import get_client, _state
     client = get_client()
-    data = client.get("/crawlers")
-    items = data.get("data", data) if isinstance(data, dict) else data
+    crawlers = client.crawlers.list()
     lower = keyword.lower()
-    matches = [c for c in items if lower in c.get("name", "").lower()]
+    matches = [c for c in crawlers if lower in c.name.lower()]
     if _state.get("json"):
-        print_json(matches)
+        print_json([asdict(c) for c in matches])
         return
     if not matches:
         print_info(f"No crawlers matching '{keyword}'")
         return
     rows = []
     for c in matches:
-        cpr = c.get("credits_per_row", "?")
-        if isinstance(cpr, dict):
-            cpr = cpr.get("current", cpr.get("legacy", "?"))
-        rows.append([c.get("name", ""), c.get("id", "")[:12], str(cpr)])
+        rows.append([c.name, c.id[:12], str(c.credits_per_row or "?")])
     print_table(["Name", "Hash", "Credits/Row"], rows)

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from dataclasses import asdict
+
 import typer
 
 from lobstr_cli.config import save_token, save_alias, load_config, get_config_path
@@ -22,7 +24,6 @@ def show_config():
     from lobstr_cli.cli import _state
     cfg = load_config()
     if _state.get("json"):
-        # Mask token in JSON output too
         masked = dict(cfg)
         if "auth" in masked and "token" in masked["auth"]:
             t = masked["auth"]["token"]
@@ -60,22 +61,21 @@ def whoami():
     """Show current user and balance."""
     from lobstr_cli.cli import get_client, _state
     client = get_client()
-    me = client.get("/me")
-    balance = client.get("/user/balance")
+    me = client.me()
+    balance = client.balance()
     if _state.get("json"):
-        print_json({**me, "balance": balance})
+        print_json({**asdict(me), "balance": asdict(balance)})
         return
-    name = f"{me.get('first_name', '')} {me.get('last_name', '')}".strip() or None
-    plan_list = me.get("plan", [])
-    plan_name = plan_list[0].get("name") if plan_list else None
-    plan_status = plan_list[0].get("status") if plan_list else None
+    name = f"{me.first_name} {me.last_name}".strip() or None
+    plan_name = me.plan[0].get("name") if me.plan else None
+    plan_status = me.plan[0].get("status") if me.plan else None
     print_detail([
         ("Name", name),
-        ("Email", me.get("email")),
+        ("Email", me.email),
         ("Plan", plan_name),
         ("Status", plan_status),
-        ("Staff", me.get("is_staff")),
-        ("Balance", f"{balance.get('available', 0)} credits"),
-        ("Consumed", balance.get("consumed", 0)),
-        ("Slots Used", f"{balance.get('used_slots', '?')}/{balance.get('total_available_slots', '?')}"),
+        ("Staff", me.is_staff),
+        ("Balance", f"{balance.available} credits"),
+        ("Consumed", balance.consumed),
+        ("Slots Used", f"{balance.used_slots}/{balance.total_available_slots}"),
     ])

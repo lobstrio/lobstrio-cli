@@ -4,8 +4,8 @@ from typing import Optional
 import typer
 
 from lobstr_cli import __version__
+from lobstrio import LobstrClient
 from lobstr_cli.config import get_token
-from lobstr_cli.client import LobstrClient
 from lobstr_cli.display import set_output_mode, print_error
 
 app = typer.Typer(
@@ -20,13 +20,22 @@ _state: dict = {}
 
 
 def get_client() -> LobstrClient:
-    """Get or create the HTTP client from global state."""
+    """Get or create the SDK client from global state."""
     if "client" not in _state:
         token = get_token(override=_state.get("token"))
         if not token:
             print_error("No API token. Run: lobstr config set-token <TOKEN>\n  Get your token at https://app.lobstr.io/dashboard/api")
             raise typer.Exit(1)
-        _state["client"] = LobstrClient(token=token, verbose=_state.get("verbose", False))
+        client = LobstrClient(token=token)
+        if _state.get("verbose"):
+            import sys
+            _orig_send = client._http._client.send
+            def _verbose_send(request, **kwargs):
+                resp = _orig_send(request, **kwargs)
+                print(f"  {request.method} {request.url} -> {resp.status_code}", file=sys.stderr)
+                return resp
+            client._http._client.send = _verbose_send
+        _state["client"] = client
     return _state["client"]
 
 

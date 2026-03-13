@@ -3,35 +3,28 @@ from unittest.mock import patch, MagicMock
 from typer.testing import CliRunner
 
 from lobstr_cli.cli import app, _state
+from lobstrio.models.account import Account, AccountType, SyncStatus
 
 
 runner = CliRunner()
 
-ACCOUNTS = {
-    "data": [
-        {
-            "id": "acc1abc123def456",
-            "username": "johndoe",
-            "type": "twitter-sync",
-            "status_code_info": "synchronized",
-            "status_code_description": "Account is synced",
-            "last_synchronization_time": "2025-01-15T10:00:00Z",
-            "baseurl": "https://twitter.com",
-            "created_at": "2025-01-01T00:00:00Z",
-            "updated_at": None,
-            "squids": [{"name": "Twitter Scraper", "hash_value": "squid1"}],
-        },
-    ]
-}
+ACCOUNTS = [
+    Account(
+        id="acc1abc123def456", username="johndoe", type="twitter-sync",
+        status_code_info="synchronized", status_code_description="Account is synced",
+        baseurl="https://twitter.com", created_at="2025-01-01T00:00:00Z",
+        updated_at=None, last_synchronization_time="2025-01-15T10:00:00Z",
+        squids=[{"name": "Twitter Scraper", "hash_value": "squid1"}],
+        params={},
+    ),
+]
 
 ACCOUNT_TYPES = [
-    {
-        "id": "type1",
-        "name": "twitter-sync",
-        "domain": "Twitter",
-        "baseurl": "https://twitter.com",
-        "cookies": [{"name": "auth_token", "required": True}],
-    },
+    AccountType(
+        name="twitter-sync", domain="Twitter",
+        baseurl="https://twitter.com",
+        cookies=[{"name": "auth_token", "required": True}],
+    ),
 ]
 
 
@@ -42,14 +35,9 @@ def clean_state():
     _state.clear()
 
 
-def _mock_client(get_resp=None):
+def _mock_client():
     mock = MagicMock()
-    if callable(get_resp):
-        mock.get.side_effect = get_resp
-    else:
-        mock.get.return_value = get_resp or ACCOUNTS
-    mock.post.return_value = {"id": "sync123", "object": "synchronize-cookies", "status_code": 100, "status_text": "created"}
-    mock.delete.return_value = {"id": "acc1abc123def456", "object": "account", "deleted": "true"}
+    mock.accounts.list.return_value = ACCOUNTS
     return mock
 
 
@@ -71,12 +59,8 @@ class TestAccountsLs:
 
 class TestAccountsShow:
     def test_show_by_username(self):
-        single_account = {"data": [ACCOUNTS["data"][0]]}
-        def get_resp(path, **kw):
-            if path == "/accounts":
-                return ACCOUNTS
-            return single_account
-        mock = _mock_client(get_resp)
+        mock = _mock_client()
+        mock.accounts.get.return_value = ACCOUNTS[0]
         with patch("lobstr_cli.cli.get_client", return_value=mock):
             result = runner.invoke(app, ["accounts", "show", "johndoe"])
         assert result.exit_code == 0
@@ -84,12 +68,8 @@ class TestAccountsShow:
         assert "twitter-sync" in result.output
 
     def test_show_json(self):
-        single_account = {"data": [ACCOUNTS["data"][0]]}
-        def get_resp(path, **kw):
-            if path == "/accounts":
-                return ACCOUNTS
-            return single_account
-        mock = _mock_client(get_resp)
+        mock = _mock_client()
+        mock.accounts.get.return_value = ACCOUNTS[0]
         with patch("lobstr_cli.cli.get_client", return_value=mock):
             result = runner.invoke(app, ["--json", "accounts", "show", "johndoe"])
         assert result.exit_code == 0
@@ -99,6 +79,7 @@ class TestAccountsShow:
 class TestAccountsRm:
     def test_delete_with_force(self):
         mock = _mock_client()
+        mock.accounts.delete.return_value = {"id": "acc1abc123def456", "deleted": "true"}
         with patch("lobstr_cli.cli.get_client", return_value=mock):
             result = runner.invoke(app, ["accounts", "rm", "johndoe", "--force"])
         assert result.exit_code == 0
@@ -113,7 +94,8 @@ class TestAccountsRm:
 
 class TestAccountsTypes:
     def test_list_types(self):
-        mock = _mock_client(lambda path, **kw: ACCOUNT_TYPES)
+        mock = _mock_client()
+        mock.accounts.types.return_value = ACCOUNT_TYPES
         with patch("lobstr_cli.cli.get_client", return_value=mock):
             result = runner.invoke(app, ["accounts", "types"])
         assert result.exit_code == 0
@@ -121,7 +103,8 @@ class TestAccountsTypes:
         assert "Twitter" in result.output
 
     def test_types_json(self):
-        mock = _mock_client(lambda path, **kw: ACCOUNT_TYPES)
+        mock = _mock_client()
+        mock.accounts.types.return_value = ACCOUNT_TYPES
         with patch("lobstr_cli.cli.get_client", return_value=mock):
             result = runner.invoke(app, ["--json", "accounts", "types"])
         assert result.exit_code == 0
@@ -130,16 +113,16 @@ class TestAccountsTypes:
 class TestAccountsSync:
     def test_sync_new(self):
         mock = _mock_client()
+        mock.accounts.sync.return_value = {"id": "sync123", "status_text": "created"}
         with patch("lobstr_cli.cli.get_client", return_value=mock):
             result = runner.invoke(app, ["accounts", "sync", "twitter-sync", "--cookie", "auth_token=abc123"])
         assert result.exit_code == 0
         assert "Sync started" in result.output
-        call_json = mock.post.call_args[1]["json"]
-        assert call_json["type"] == "twitter-sync"
-        assert call_json["cookies"]["auth_token"] == "abc123"
+        mock.accounts.sync.assert_called_once_with("twitter-sync", {"auth_token": "abc123"}, account=None)
 
     def test_sync_refresh(self):
         mock = _mock_client()
+        mock.accounts.sync.return_value = {"id": "sync123", "status_text": "created"}
         with patch("lobstr_cli.cli.get_client", return_value=mock):
             result = runner.invoke(app, [
                 "accounts", "sync", "twitter-sync",
@@ -147,34 +130,36 @@ class TestAccountsSync:
                 "--cookie", "auth_token=newtoken",
             ])
         assert result.exit_code == 0
-        call_json = mock.post.call_args[1]["json"]
-        assert call_json["account"] == "acc1abc123def456"
-        assert call_json["cookies"]["auth_token"] == "newtoken"
+        mock.accounts.sync.assert_called_once_with(
+            "twitter-sync", {"auth_token": "newtoken"}, account="acc1abc123def456",
+        )
 
     def test_sync_json_cookies(self):
         mock = _mock_client()
+        mock.accounts.sync.return_value = {"id": "sync123", "status_text": "created"}
         with patch("lobstr_cli.cli.get_client", return_value=mock):
             result = runner.invoke(app, [
                 "accounts", "sync", "twitter-sync",
                 "--cookies-json", '{"auth_token": "abc", "ct0": "xyz"}',
             ])
         assert result.exit_code == 0
-        call_json = mock.post.call_args[1]["json"]
-        assert call_json["cookies"]["auth_token"] == "abc"
-        assert call_json["cookies"]["ct0"] == "xyz"
+        call_args = mock.accounts.sync.call_args
+        assert call_args[0][1]["auth_token"] == "abc"
+        assert call_args[0][1]["ct0"] == "xyz"
 
     def test_sync_file_cookies(self, tmp_path):
         cookie_file = tmp_path / "cookies.json"
         cookie_file.write_text('{"auth_token": "fromfile"}')
         mock = _mock_client()
+        mock.accounts.sync.return_value = {"id": "sync123", "status_text": "created"}
         with patch("lobstr_cli.cli.get_client", return_value=mock):
             result = runner.invoke(app, [
                 "accounts", "sync", "twitter-sync",
                 "--cookies-file", str(cookie_file),
             ])
         assert result.exit_code == 0
-        call_json = mock.post.call_args[1]["json"]
-        assert call_json["cookies"]["auth_token"] == "fromfile"
+        call_args = mock.accounts.sync.call_args
+        assert call_args[0][1]["auth_token"] == "fromfile"
 
     def test_sync_no_cookies_error(self):
         mock = _mock_client()
@@ -184,6 +169,7 @@ class TestAccountsSync:
 
     def test_sync_json_mode(self):
         mock = _mock_client()
+        mock.accounts.sync.return_value = {"id": "sync123", "status_text": "created"}
         with patch("lobstr_cli.cli.get_client", return_value=mock):
             result = runner.invoke(app, ["--json", "accounts", "sync", "twitter-sync", "--cookie", "auth_token=abc"])
         assert result.exit_code == 0
@@ -192,9 +178,11 @@ class TestAccountsSync:
 
 class TestAccountsSyncStatus:
     def test_sync_status(self):
-        mock = _mock_client(lambda path, **kw: {
-            "id": "sync123", "status_code": 200, "status_text": "synchronized", "account_hash": "acc1abc123def456"
-        })
+        mock = _mock_client()
+        mock.accounts.sync_status.return_value = SyncStatus(
+            id="sync123", status_code="200",
+            status_text="synchronized", account_hash="acc1abc123def456",
+        )
         with patch("lobstr_cli.cli.get_client", return_value=mock):
             result = runner.invoke(app, ["accounts", "sync-status", "sync123"])
         assert result.exit_code == 0
@@ -204,7 +192,7 @@ class TestAccountsSyncStatus:
 class TestAccountsUpdate:
     def test_update_limits(self):
         mock = _mock_client()
-        mock.post.return_value = {"params": {"default": {}, "user": {}}}
+        mock.accounts.update.return_value = {"params": {"default": {}, "user": {}}}
         with patch("lobstr_cli.cli.get_client", return_value=mock):
             result = runner.invoke(app, [
                 "accounts", "update", "johndoe",
@@ -213,9 +201,10 @@ class TestAccountsUpdate:
                 "--param", "profiles=150",
             ])
         assert result.exit_code == 0
-        call_json = mock.post.call_args[1]["json"]
-        assert call_json["params"]["batch"] == 20
-        assert call_json["params"]["profiles"] == 150
+        mock.accounts.update.assert_called_once_with(
+            "acc1abc123def456", type="sales-nav-sync",
+            params={"batch": 20, "profiles": 150},
+        )
 
     def test_update_no_params_error(self):
         mock = _mock_client()

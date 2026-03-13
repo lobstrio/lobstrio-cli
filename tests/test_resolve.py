@@ -144,7 +144,7 @@ class TestMatchName:
 class TestResolveSquid:
     def _mock_client(self, squids):
         mock = MagicMock()
-        mock.get.return_value = {"data": squids}
+        mock.squids.list.return_value = squids
         return mock
 
     def test_resolve_by_hash_prefix(self):
@@ -417,20 +417,20 @@ class TestMatchUsername:
 class TestResolveAccount:
     def test_resolve_by_hash_prefix(self):
         client = MagicMock()
-        client.get.return_value = {"data": [{"id": "aabb11cc22dd", "username": "johndoe"}]}
+        client.accounts.list.return_value = [{"id": "aabb11cc22dd", "username": "johndoe"}]
         assert resolve_account(client, "aabb11") == "aabb11cc22dd"
 
     def test_resolve_by_username(self):
         client = MagicMock()
-        client.get.return_value = {"data": [{"id": "acc123", "username": "johndoe"}]}
+        client.accounts.list.return_value = [{"id": "acc123", "username": "johndoe"}]
         assert resolve_account(client, "johndoe") == "acc123"
 
     def test_hex_falls_back_to_username(self):
         client = MagicMock()
-        client.get.return_value = {"data": [{"id": "xyz789", "username": "deadbeef"}]}
+        client.accounts.list.return_value = [{"id": "xyz789", "username": "deadbeef"}]
         assert resolve_account(client, "deadbeef") == "xyz789"
 
     def test_hex_prefers_hash_over_username(self):
         client = MagicMock()
-        client.get.return_value = {"data": [{"id": "deadbeef1234", "username": "deadbeef"}]}
+        client.accounts.list.return_value = [{"id": "deadbeef1234", "username": "deadbeef"}]
         assert resolve_account(client, "deadbeef") == "deadbeef1234"
