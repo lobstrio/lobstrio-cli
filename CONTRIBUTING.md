@@ -54,7 +54,6 @@ src/lobstr_cli/
     __init__.py          # Package version
     __main__.py          # Entry point
     cli.py               # Root Typer app, global flags
-    client.py            # HTTP client with error handling
     config.py            # TOML config management
     display.py           # Rich output helpers
     resolve.py           # Hash/name resolution utilities
@@ -69,7 +68,7 @@ src/lobstr_cli/
         go.py            # one-shot workflow
         results.py       # result fetching
 tests/
-    test_client.py       # HTTP client tests
+    test_client.py       # SDK error types and client tests
     test_config.py       # Config tests
     test_resolve.py      # Resolution logic tests
     test_display.py      # Display output tests

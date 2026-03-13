@@ -7,7 +7,7 @@ Run web scrapers, manage squids, download results — all from your terminal.
 ## Installation
 
 ```bash
-pip install lobstrio-cli
+pip install lobstrio
 ```
 
 ## Quick start
@@ -190,7 +190,7 @@ Run and task commands require full 32-character hashes. Use `lobstr run ls` or `
 ```bash
 # Clone and install in dev mode
 git clone https://github.com/lobstrio/lobstrio-cli.git
-cd lobstr-cli
+cd lobstrio-cli
 pip install -e ".[dev]"
 
 # Run tests

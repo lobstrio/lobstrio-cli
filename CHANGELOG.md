@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] - 2026-03-13
+
+### Changed
+
+- Replaced internal HTTP client with `lobstrio-sdk` for all API calls
+- All commands now use typed SDK models and resource methods
+- Removed `pytest-httpx` dev dependency (tests mock SDK methods directly)
+
+### Removed
+
+- Deleted internal `client.py` (replaced by `lobstrio-sdk`)
+
+### Fixed
+
+- Fixed double CLI execution when invoked via console script entry point
+- Fixed install command in README (`pip install lobstrio`, not `lobstrio-cli`)
+
 ## [0.3.0] - 2026-03-06
 
 ### Added
