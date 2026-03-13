@@ -1,7 +1,7 @@
 import sys
 
 from lobstr_cli.cli import app
-from lobstr_cli.client import APIError
+from lobstrio.exceptions import APIError
 from lobstr_cli.display import print_error
 
 
@@ -13,4 +13,5 @@ def main():
         sys.exit(1)
 
 
-main()
+if __name__ == "__main__":
+    main()
