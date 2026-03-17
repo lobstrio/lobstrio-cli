@@ -10,6 +10,9 @@
   <a href="https://github.com/lobstrio/lobstrio-cli/actions"><img src="https://img.shields.io/github/actions/workflow/status/lobstrio/lobstrio-cli/test.yml?label=tests" alt="Tests"></a>
   <a href="https://github.com/lobstrio/lobstrio-cli/blob/main/LICENSE"><img src="https://img.shields.io/github/license/lobstrio/lobstrio-cli" alt="License"></a>
   <a href="https://github.com/lobstrio/lobstrio-cli"><img src="https://img.shields.io/github/last-commit/lobstrio/lobstrio-cli" alt="Last commit"></a>
+  <a href="https://github.com/lobstrio/lobstrio-cli/stargazers"><img src="https://img.shields.io/github/stars/lobstrio/lobstrio-cli" alt="Stars"></a>
+  <a href="https://github.com/lobstrio/lobstrio-cli/network/members"><img src="https://img.shields.io/github/forks/lobstrio/lobstrio-cli" alt="Forks"></a>
+  <a href="https://pypi.org/project/lobstrio/"><img src="https://img.shields.io/pypi/dm/lobstrio" alt="Downloads"></a>
 </p>
 
 ---
