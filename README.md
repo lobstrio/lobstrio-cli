@@ -23,20 +23,9 @@ Run web scrapers, manage squids, download results — all from your terminal.
 
 ## Demo
 
-<!-- Replace with a terminal GIF recording (e.g. using asciinema or vhs) for maximum impact -->
-
-```
-$ lobstr go google-maps-leads-scraper "https://maps.google.com/maps/search/pizza+paris" -o results.csv
-
-  Crawler   Google Maps Leads Scraper
-  Squid     google-maps-leads-scraper-a8f2 (created)
-  Tasks     1 added
-  Run       started (e4b2c9d1...)
-
-  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 100% 00:42 ETA 0:00
-
-  ✓ Downloaded 247 results → results.csv
-```
+<p align="center">
+  <img src="https://raw.githubusercontent.com/lobstrio/lobstrio-cli/main/.github/demo.svg" alt="lobstrio CLI demo" width="700">
+</p>
 
 ## Installation
 
