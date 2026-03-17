@@ -1,5 +1,3 @@
-import pytest
-from pathlib import Path
 
 
 def test_get_config_dir(tmp_path, monkeypatch):

@@ -1,10 +1,9 @@
 from __future__ import annotations
 
 from dataclasses import asdict
-from typing import Optional
 import typer
 
-from lobstr_cli.display import print_json, print_table, print_detail, print_detail_grouped, print_info
+from lobstr_cli.display import print_json, print_table, print_detail_grouped, print_info
 
 crawlers_app = typer.Typer(no_args_is_help=True)
 

@@ -1,11 +1,8 @@
 import pytest
-from io import StringIO
-from unittest.mock import patch
 
 from lobstr_cli.display import (
     set_output_mode, print_json, print_error, print_success,
     print_info, print_table, print_detail, make_progress,
-    _json_mode, _quiet_mode,
 )
 
 

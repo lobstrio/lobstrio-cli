@@ -5,7 +5,7 @@ from dataclasses import asdict
 import typer
 
 from lobstr_cli.config import save_token, save_alias, load_config, get_config_path
-from lobstr_cli.display import print_success, print_detail, print_json, print_error, print_table
+from lobstr_cli.display import print_success, print_detail, print_json
 
 config_app = typer.Typer(no_args_is_help=True)
 whoami_app = typer.Typer()

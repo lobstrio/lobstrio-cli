@@ -74,8 +74,6 @@ def print_detail_grouped(sections: list[tuple[str | None, list[tuple[str, Any]]]
 
     Each section is a (title, fields) tuple. Title can be None for untitled sections.
     """
-    from rich.panel import Panel
-    from rich.text import Text
 
     table = Table(show_header=False, box=None, padding=(0, 2))
     table.add_column("Field", style="bold cyan")

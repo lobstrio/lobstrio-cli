@@ -2,10 +2,9 @@ from __future__ import annotations
 
 from dataclasses import asdict
 from pathlib import Path
-from typing import Optional
 import typer
 
-from lobstr_cli.display import print_json, print_table, print_detail, print_success, print_info, print_error
+from lobstr_cli.display import print_json, print_table, print_detail, print_success, print_info
 from lobstr_cli.resolve import resolve_squid as _resolve_squid, require_full_hash
 
 task_app = typer.Typer(no_args_is_help=True)
