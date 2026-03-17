@@ -1,6 +1,17 @@
-# lobstrio-cli
+<p align="center">
+  <strong>lobstrio</strong><br>
+  <em>Command-line interface for the <a href="https://lobstr.io">Lobstr.io</a> scraping API</em>
+</p>
 
-Command-line interface for the [Lobstr.io](https://lobstr.io) scraping API.
+<p align="center">
+  <a href="https://pypi.org/project/lobstrio/"><img src="https://img.shields.io/pypi/v/lobstrio?color=blue" alt="PyPI"></a>
+  <a href="https://pypi.org/project/lobstrio/"><img src="https://img.shields.io/pypi/pyversions/lobstrio" alt="Python"></a>
+  <a href="https://github.com/lobstrio/lobstrio-cli/actions"><img src="https://img.shields.io/github/actions/workflow/status/lobstrio/lobstrio-cli/test.yml?label=tests" alt="Tests"></a>
+  <a href="https://github.com/lobstrio/lobstrio-cli/blob/main/LICENSE"><img src="https://img.shields.io/github/license/lobstrio/lobstrio-cli" alt="License"></a>
+  <a href="https://github.com/lobstrio/lobstrio-cli"><img src="https://img.shields.io/github/last-commit/lobstrio/lobstrio-cli" alt="Last commit"></a>
+</p>
+
+---
 
 Run web scrapers, manage squids, download results — all from your terminal.
 
@@ -9,6 +20,8 @@ Run web scrapers, manage squids, download results — all from your terminal.
 ```bash
 pip install lobstrio
 ```
+
+Requires Python 3.10+.
 
 ## Quick start
 
@@ -28,25 +41,33 @@ lobstr go google-maps-leads-scraper --file urls.txt -o results.csv
 
 ## Commands
 
-### Account
+<details>
+<summary><strong>Account &amp; config</strong></summary>
 
 ```bash
 lobstr whoami                          # Show account info and balance
 lobstr config set-token TOKEN          # Save API token
 lobstr config show                     # Show current config
-lobstr config set-alias maps SQUID  # Create alias for a squid
+lobstr config set-alias maps SQUID     # Create alias for a squid
 ```
 
-### Crawlers
+</details>
+
+<details>
+<summary><strong>Crawlers</strong> — browse the scraper catalog</summary>
 
 ```bash
 lobstr crawlers ls                                   # List all available crawlers
 lobstr crawlers show google-maps-leads-scraper       # Show crawler details
 lobstr crawlers search "Google Maps"                 # Search by name
 lobstr crawlers params google-maps-leads-scraper     # Show crawler parameters
+lobstr crawlers attrs google-maps-leads-scraper      # Show result attributes
 ```
 
-### Squids
+</details>
+
+<details>
+<summary><strong>Squids</strong> — manage scraper instances</summary>
 
 ```bash
 lobstr squid create google-maps-leads-scraper --name "My Scraper"
@@ -57,7 +78,10 @@ lobstr squid empty SQUID               # Remove all tasks
 lobstr squid rm SQUID --force          # Delete squid
 ```
 
-### Tasks
+</details>
+
+<details>
+<summary><strong>Tasks</strong> — manage input URLs and keywords</summary>
 
 ```bash
 lobstr task add SQUID url1 url2        # Add tasks
@@ -69,7 +93,10 @@ lobstr task upload SQUID tasks.csv     # Bulk upload from CSV
 lobstr task upload-status UPLOAD_ID    # Check upload progress
 ```
 
-### Runs
+</details>
+
+<details>
+<summary><strong>Runs</strong> — start, monitor, and download</summary>
 
 ```bash
 lobstr run start SQUID                 # Start a run
@@ -84,7 +111,10 @@ lobstr run abort FULL_RUN_HASH         # Stop a run
 lobstr run download FULL_RUN_HASH      # Download results CSV
 ```
 
-### Results
+</details>
+
+<details>
+<summary><strong>Results</strong> — fetch scraped data</summary>
 
 ```bash
 lobstr results get SQUID               # Fetch results (JSON)
@@ -92,9 +122,42 @@ lobstr results get SQUID --format csv  # Fetch as CSV
 lobstr results get SQUID -o data.json  # Save to file
 ```
 
-### Go (full workflow)
+</details>
 
-The `go` command handles the entire workflow in one shot:
+<details>
+<summary><strong>Accounts</strong> — manage connected platform accounts</summary>
+
+```bash
+lobstr accounts ls                     # List all accounts
+lobstr accounts show ACCOUNT           # Show account details
+lobstr accounts types                  # List available account types
+lobstr accounts sync --type google --cookies-file cookies.json  # Sync account
+lobstr accounts sync-status SYNC_ID    # Check sync progress
+lobstr accounts update ACCOUNT --param daily_limit=100
+lobstr accounts rm ACCOUNT --force     # Delete account
+```
+
+</details>
+
+<details>
+<summary><strong>Delivery</strong> — configure result delivery</summary>
+
+```bash
+lobstr delivery email SQUID --email you@example.com
+lobstr delivery googlesheet SQUID --url "https://docs.google.com/..."
+lobstr delivery s3 SQUID --bucket my-bucket --target-path scrapes/
+lobstr delivery webhook SQUID --url "https://your-server.com/hook"
+lobstr delivery sftp SQUID --host ftp.example.com --username user --password pass
+
+# Test connectivity
+lobstr delivery test-email --email you@example.com
+lobstr delivery test-s3 --bucket my-bucket
+```
+
+</details>
+
+<details open>
+<summary><strong>Go</strong> — full workflow in one command</summary>
 
 ```bash
 # Basic usage
@@ -125,15 +188,17 @@ lobstr go google-maps-leads-scraper url1 --delete
 lobstr go google-maps-leads-scraper url1 -o my_leads.csv
 ```
 
+</details>
+
 ## Global flags
 
-```bash
-lobstr --json ...      # Output raw JSON (for piping/scripting)
-lobstr --quiet ...     # Suppress non-essential output
-lobstr --verbose ...   # Show HTTP request details
-lobstr --token T ...   # Override API token for this command
-lobstr --version       # Show version
-```
+| Flag | Description |
+|------|-------------|
+| `--json` | Output raw JSON (for piping/scripting) |
+| `--quiet` | Suppress non-essential output |
+| `--verbose` | Show HTTP request details |
+| `--token TOKEN` | Override API token for this command |
+| `--version` | Show version |
 
 ## Aliases
 
@@ -145,45 +210,26 @@ lobstr task ls @maps
 lobstr run start @maps
 ```
 
+## Identifier resolution
+
+| Resource | Resolution order | Example |
+|----------|-----------------|---------|
+| **Crawlers** | Hash prefix → Slug (exact/prefix) → Name (exact/substring) | `google-maps`, `4734d096`, `"Google Maps"` |
+| **Squids** | `@alias` → Hash prefix → Name (exact/substring) | `@maps`, `abc1`, `"My Scraper"` |
+| **Accounts** | Hash prefix → Username (exact/substring) | `f9a2`, `"john@gmail.com"` |
+| **Runs & Tasks** | Full 32-character hash only | `a1b2c3d4e5f6...` |
+
 ## Configuration
 
 Config is stored at `~/.config/lobstr/config.toml`. The API token can also be set via the `LOBSTR_TOKEN` environment variable.
 
-## Identifier resolution
+## Python SDK
 
-### Crawlers
-
-Crawlers are resolved in this order:
-
-1. **Hash** — if the input is all hex characters, match by hash prefix
-2. **Slug** — if the input contains dashes, match by slug (exact or prefix)
-3. **Name** — fallback to name matching (exact or substring)
+For programmatic access, see [lobstrio-sdk](https://github.com/lobstrio/lobstrio-sdk) — the companion Python SDK with typed models, async support, and lazy pagination.
 
 ```bash
-lobstr crawlers show 4734d096          # by hash prefix
-lobstr crawlers show google-maps       # by slug prefix
-lobstr crawlers show "Google Maps"     # by name
+pip install lobstrio-sdk
 ```
-
-Slug is the recommended identifier — it's stable, readable, and tab-completable. Use `lobstr crawlers ls` to see available slugs.
-
-### Squids
-
-Squids are resolved in this order:
-
-1. **Alias** — if prefixed with `@`, resolve via configured alias
-2. **Hash** — if all hex characters, match by hash prefix
-3. **Name** — fallback to name matching (exact or substring)
-
-```bash
-lobstr squid show @maps               # by alias
-lobstr squid show abc1                # by hash prefix
-lobstr squid show "My Scraper"        # by name
-```
-
-### Runs & tasks
-
-Run and task commands require full 32-character hashes. Use `lobstr run ls` or `lobstr task ls` to see full hashes.
 
 ## Development
 
