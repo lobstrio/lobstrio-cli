@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0] - 2026-03-17
+
+### Added
+
+- `crawlers attrs` command — show result attributes grouped by function with colored output
+- `--limit` and `--page` pagination for `accounts ls`
+- `--limit` alias for `--page-size` in `results get`
+- Animated terminal demo GIF in README
+- GitHub Actions CI (test + publish workflows)
+- FAQ, CLI vs SDK comparison, and extra badges in README
+
+### Changed
+
+- `crawlers search` now shows same columns as `crawlers ls` (slug, max concurrency, etc.)
+
 ## [0.4.0] - 2026-03-13
 
 ### Changed
