@@ -1,4 +1,5 @@
 <p align="center">
+  <img src=".github/logo.svg" alt="Lobstr.io" width="80"><br>
   <strong>lobstrio</strong><br>
   <em>Command-line interface for the <a href="https://lobstr.io">Lobstr.io</a> scraping API</em>
 </p>
