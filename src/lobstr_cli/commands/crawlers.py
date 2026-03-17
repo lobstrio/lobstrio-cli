@@ -217,5 +217,20 @@ def search_crawlers(keyword: str = typer.Argument(..., help="Search keyword")):
         return
     rows = []
     for c in matches:
-        rows.append([c.name, c.id[:12], str(c.credits_per_row or "?")])
-    print_table(["Name", "Hash", "Credits/Row"], rows)
+        status = ""
+        if c.has_issues:
+            status = "[yellow]issues[/]"
+        elif not c.is_available:
+            status = "[red]unavailable[/]"
+        elif c.is_premium:
+            status = "[cyan]premium[/]"
+        rows.append([
+            c.name,
+            c.slug,
+            c.id[:12],
+            str(c.credits_per_row or "?"),
+            str(c.max_concurrency),
+            "yes" if c.account else "no",
+            status,
+        ])
+    print_table(["Name", "Slug", "Hash", "Credits/Row", "Max Conc.", "Needs Account", "Status"], rows)
