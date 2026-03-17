@@ -13,11 +13,14 @@ accounts_app = typer.Typer(no_args_is_help=True)
 
 
 @accounts_app.command("ls")
-def list_accounts():
+def list_accounts(
+    limit: int = typer.Option(50, "--limit"),
+    page: int = typer.Option(1, "--page"),
+):
     """List your accounts."""
     from lobstr_cli.cli import get_client, _state
     client = get_client()
-    items = client.accounts.list()
+    items = client.accounts.list(limit=limit, page=page)
     if _state.get("json"):
         print_json([asdict(a) for a in items])
         return

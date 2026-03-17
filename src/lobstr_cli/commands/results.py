@@ -16,7 +16,7 @@ def get_results(
     format: str = typer.Option("json", "--format", help="Output format: json or csv"),
     output: Optional[str] = typer.Option(None, "--output", "-o", help="Save to file"),
     page: int = typer.Option(1, "--page"),
-    page_size: int = typer.Option(50, "--page-size"),
+    page_size: int = typer.Option(50, "--page-size", "--limit"),
 ):
     """Fetch results for a squid."""
     from lobstr_cli.cli import get_client, _state
