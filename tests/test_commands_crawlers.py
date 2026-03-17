@@ -3,7 +3,7 @@ from unittest.mock import patch, MagicMock
 from typer.testing import CliRunner
 
 from lobstr_cli.cli import app, _state
-from lobstrio.models.crawler import Crawler, CrawlerParams
+from lobstrio.models.crawler import Crawler, CrawlerAttribute, CrawlerParams
 
 
 runner = CliRunner()
@@ -226,6 +226,50 @@ class TestCrawlersParams:
             result = runner.invoke(app, ["crawlers", "params", "linkedin-profile"])
         assert result.exit_code == 0
 
+
+class TestCrawlersAttrs:
+    SAMPLE_ATTRS = [
+        CrawlerAttribute(
+            name="name", type="string", example="Blues Billard Club",
+            function="Export Local Businesses", is_main=True,
+            description="Business name as listed on Google Maps",
+        ),
+        CrawlerAttribute(
+            name="email", type="string", example="info@lobstr.io",
+            function="Extract Emails from Website", is_main=False,
+            description="Email address found on the business website",
+        ),
+    ]
+
+    def test_attrs_table(self):
+        mock = _mock_client()
+        mock.crawlers.attributes.return_value = self.SAMPLE_ATTRS
+        with patch("lobstr_cli.cli.get_client", return_value=mock):
+            result = runner.invoke(app, ["crawlers", "attrs", "google-maps-leads-scraper"])
+        assert result.exit_code == 0
+        assert "name" in result.output
+        assert "email" in result.output
+        # Grouped by function
+        assert "Export Local Businesses" in result.output
+        assert "Extract Emails from Website" in result.output
+
+    def test_attrs_json(self):
+        mock = _mock_client()
+        mock.crawlers.attributes.return_value = self.SAMPLE_ATTRS
+        with patch("lobstr_cli.cli.get_client", return_value=mock):
+            result = runner.invoke(app, ["--json", "crawlers", "attrs", "google-maps-leads-scraper"])
+        assert result.exit_code == 0
+        assert "Blues Billard Club" in result.output
+
+    def test_attrs_empty(self):
+        mock = _mock_client()
+        mock.crawlers.attributes.return_value = []
+        with patch("lobstr_cli.cli.get_client", return_value=mock):
+            result = runner.invoke(app, ["crawlers", "attrs", "google-maps-leads-scraper"])
+        assert result.exit_code == 0
+
+
+class TestCrawlersParamsAmbiguous:
     def test_params_ambiguous_slug(self):
         crawlers = [
             Crawler(

@@ -157,6 +157,51 @@ def crawler_params(crawler: str = typer.Argument(..., help="Crawler hash or pref
         print_table(["Function", "Credits", "Default"], rows)
 
 
+@crawlers_app.command("attrs")
+def crawler_attributes(crawler: str = typer.Argument(..., help="Crawler slug, hash, or name")):
+    """Show result attributes (columns) for a crawler."""
+    from collections import OrderedDict
+    from lobstr_cli.cli import get_client, _state
+    from lobstr_cli.resolve import resolve_crawler
+    client = get_client()
+    all_crawlers = client.crawlers.list()
+    crawler_id = resolve_crawler(crawler, all_crawlers)
+    attrs = client.crawlers.attributes(crawler_id)
+    if _state.get("json"):
+        print_json([asdict(a) for a in attrs])
+        return
+    if not attrs:
+        print_info("No attributes found for this crawler.")
+        return
+    groups: OrderedDict[str, list] = OrderedDict()
+    for a in attrs:
+        groups.setdefault(a.function, []).append(a)
+    for func, items in groups.items():
+        print_info(f"\n{func}:")
+        rows = []
+        for a in items:
+            example = str(a.example) if a.example is not None else ""
+            if len(example) > 40:
+                example = example[:40] + "..."
+            type_colors = {
+                "string": "green", "text": "green",
+                "integer": "cyan", "float": "cyan",
+                "boolean": "yellow",
+                "json": "magenta",
+            }
+            color = type_colors.get(a.type, "")
+            if example and color:
+                example = f"[{color}]{example}[/]"
+            rows.append([
+                f"[bold]{a.name}[/]",
+                a.type,
+                "[green]yes[/]" if a.is_main else "no",
+                a.description,
+                example,
+            ])
+        print_table(["Name", "Type", "Main", "Description", "Example"], rows)
+
+
 @crawlers_app.command("search")
 def search_crawlers(keyword: str = typer.Argument(..., help="Search keyword")):
     """Search crawlers by name."""
