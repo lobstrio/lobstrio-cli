@@ -24,7 +24,7 @@ Run web scrapers, manage squids, download results — all from your terminal.
 ## Demo
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/lobstrio/lobstrio-cli/main/.github/demo.svg" alt="lobstrio CLI demo" width="700">
+  <img src="https://raw.githubusercontent.com/lobstrio/lobstrio-cli/main/.github/demo.gif" alt="lobstrio CLI demo" width="700">
 </p>
 
 ## Installation
