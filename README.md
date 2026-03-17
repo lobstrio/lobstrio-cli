@@ -49,7 +49,7 @@ Requires Python 3.10+.
 ## Quick start
 
 ```bash
-# Save your API token (get it at https://app.lobstr.io/dashboard/api)
+# Save your API token (find it at https://app.lobstr.io/dashboard/api)
 lobstr config set-token YOUR_TOKEN
 
 # One-command scrape: create squid, add tasks, run, download
@@ -263,7 +263,7 @@ For programmatic access, see [lobstrio-sdk](https://github.com/lobstrio/lobstrio
 <details>
 <summary><strong>Where do I get an API token?</strong></summary>
 
-Sign up at [lobstr.io](https://lobstr.io), then go to [Dashboard → API](https://app.lobstr.io/dashboard/api) to generate your token.
+Go to [Dashboard → API](https://app.lobstr.io/dashboard/api) to find your token. It's always available there, pre-generated.
 
 </details>
 
