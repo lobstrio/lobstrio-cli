@@ -9,15 +9,34 @@
   <a href="https://pypi.org/project/lobstrio/"><img src="https://img.shields.io/pypi/pyversions/lobstrio" alt="Python"></a>
   <a href="https://github.com/lobstrio/lobstrio-cli/actions"><img src="https://img.shields.io/github/actions/workflow/status/lobstrio/lobstrio-cli/test.yml?label=tests" alt="Tests"></a>
   <a href="https://github.com/lobstrio/lobstrio-cli/blob/main/LICENSE"><img src="https://img.shields.io/github/license/lobstrio/lobstrio-cli" alt="License"></a>
-  <a href="https://github.com/lobstrio/lobstrio-cli"><img src="https://img.shields.io/github/last-commit/lobstrio/lobstrio-cli" alt="Last commit"></a>
+  <a href="https://github.com/lobstrio/lobstrio-cli/issues"><img src="https://img.shields.io/github/issues/lobstrio/lobstrio-cli" alt="Issues"></a>
+  <a href="https://github.com/lobstrio/lobstrio-cli/pulls"><img src="https://img.shields.io/github/issues-pr/lobstrio/lobstrio-cli" alt="PRs"></a>
   <a href="https://github.com/lobstrio/lobstrio-cli/stargazers"><img src="https://img.shields.io/github/stars/lobstrio/lobstrio-cli" alt="Stars"></a>
   <a href="https://github.com/lobstrio/lobstrio-cli/network/members"><img src="https://img.shields.io/github/forks/lobstrio/lobstrio-cli" alt="Forks"></a>
   <a href="https://pypi.org/project/lobstrio/"><img src="https://img.shields.io/pypi/dm/lobstrio" alt="Downloads"></a>
+  <img src="https://img.shields.io/badge/code%20style-ruff-d4aa00" alt="Ruff">
 </p>
 
 ---
 
 Run web scrapers, manage squids, download results — all from your terminal.
+
+## Demo
+
+<!-- Replace with a terminal GIF recording (e.g. using asciinema or vhs) for maximum impact -->
+
+```
+$ lobstr go google-maps-leads-scraper "https://maps.google.com/maps/search/pizza+paris" -o results.csv
+
+  Crawler   Google Maps Leads Scraper
+  Squid     google-maps-leads-scraper-a8f2 (created)
+  Tasks     1 added
+  Run       started (e4b2c9d1...)
+
+  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 100% 00:42 ETA 0:00
+
+  ✓ Downloaded 247 results → results.csv
+```
 
 ## Installation
 
@@ -227,28 +246,79 @@ lobstr run start @maps
 
 Config is stored at `~/.config/lobstr/config.toml`. The API token can also be set via the `LOBSTR_TOKEN` environment variable.
 
-## Python SDK
+## CLI vs SDK
 
-For programmatic access, see [lobstrio-sdk](https://github.com/lobstrio/lobstrio-sdk) — the companion Python SDK with typed models, async support, and lazy pagination.
+| | **CLI** (`pip install lobstrio`) | **SDK** (`pip install lobstrio-sdk`) |
+|---|---|---|
+| **Use case** | Terminal workflows, quick scrapes, cron jobs | Scripts, pipelines, applications |
+| **Interface** | Shell commands | Python API |
+| **Output** | Rich tables, progress bars, CSV files | Typed dataclass models |
+| **Async** | No | Yes (`AsyncLobstrClient`) |
+| **Pagination** | Manual (`--page`, `--limit`) | Auto (`client.squids.iter()`) |
+
+For programmatic access, see [lobstrio-sdk](https://github.com/lobstrio/lobstrio-sdk).
+
+## FAQ
+
+<details>
+<summary><strong>Where do I get an API token?</strong></summary>
+
+Sign up at [lobstr.io](https://lobstr.io), then go to [Dashboard → API](https://app.lobstr.io/dashboard/api) to generate your token.
+
+</details>
+
+<details>
+<summary><strong>How do I use keyword-based crawlers?</strong></summary>
+
+Some crawlers accept keywords instead of URLs. Use the `--key` flag:
 
 ```bash
-pip install lobstrio-sdk
+lobstr go google-search-scraper "pizza delivery" --key keyword
 ```
 
-## Development
+Use `lobstr crawlers params <crawler>` to see what parameters a crawler accepts.
+
+</details>
+
+<details>
+<summary><strong>Can I use short hashes for runs and tasks?</strong></summary>
+
+No. Run and task endpoints require the full 32-character hash. Use `lobstr run ls SQUID` or `lobstr task ls SQUID` to see full hashes. Crawlers and squids support prefix matching.
+
+</details>
+
+<details>
+<summary><strong>How do I pipe results to other tools?</strong></summary>
+
+Use `--json` for machine-readable output:
 
 ```bash
-# Clone and install in dev mode
-git clone https://github.com/lobstrio/lobstrio-cli.git
-cd lobstrio-cli
-pip install -e ".[dev]"
-
-# Run tests
-pytest
-
-# Lint
-ruff check src/
+lobstr --json results get SQUID | jq '.[].email'
+lobstr --json crawlers ls | jq '.[] | .name'
 ```
+
+</details>
+
+<details>
+<summary><strong>Can I run scrapes in the background?</strong></summary>
+
+Yes. Use `--no-download` with `go`, or start a run without `--wait`:
+
+```bash
+lobstr go google-maps-leads-scraper urls.txt --no-download
+lobstr run start SQUID  # returns immediately
+lobstr run watch RUN_HASH  # check progress later
+```
+
+</details>
+
+## Contributing
+
+Contributions are welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup, code style, and versioning guidelines.
+
+## Changelog
+
+See [CHANGELOG.md](CHANGELOG.md) for release history.
 
 ## License
 
