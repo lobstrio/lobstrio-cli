@@ -29,8 +29,8 @@ def list_crawlers():
         rows.append([
             c.name,
             c.slug,
-            c.id[:12],
-            str(c.credits_per_row or "?"),
+            c.id,
+            "?" if c.credits_per_row is None else f"{c.credits_per_row:g}",
             str(c.max_concurrency),
             "yes" if c.account else "no",
             status,
@@ -227,8 +227,8 @@ def search_crawlers(keyword: str = typer.Argument(..., help="Search keyword")):
         rows.append([
             c.name,
             c.slug,
-            c.id[:12],
-            str(c.credits_per_row or "?"),
+            c.id,
+            "?" if c.credits_per_row is None else f"{c.credits_per_row:g}",
             str(c.max_concurrency),
             "yes" if c.account else "no",
             status,
