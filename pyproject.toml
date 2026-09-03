@@ -39,7 +39,10 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
     "pytest>=8.0",
-    "ruff>=0.4.0",
+    # Capped: ruff 0.12+ tightened lint rules and flags pre-existing code
+    # across the repo. Pin below that so CI stays reproducible; bump
+    # deliberately alongside a repo-wide `ruff check --fix`.
+    "ruff>=0.4.0,<0.12",
 ]
 
 [project.urls]
