@@ -61,6 +61,20 @@ class TestGetClient:
         _state["client"] = mock_client
         assert get_client() is mock_client
 
+    def test_lobstr_api_base_env_overrides_base_url(self, monkeypatch):
+        monkeypatch.setenv("LOBSTR_API_BASE", "http://127.0.0.1:8012/v1/")
+        with patch("lobstr_cli.cli.get_token", return_value="test-token-123"), \
+                patch("lobstr_cli.cli.LobstrClient") as MockClient:
+            get_client()
+        MockClient.assert_called_once_with(token="test-token-123", base_url="http://127.0.0.1:8012/v1/")
+
+    def test_no_api_base_uses_default(self, monkeypatch):
+        monkeypatch.delenv("LOBSTR_API_BASE", raising=False)
+        with patch("lobstr_cli.cli.get_token", return_value="test-token-123"), \
+                patch("lobstr_cli.cli.LobstrClient") as MockClient:
+            get_client()
+        MockClient.assert_called_once_with(token="test-token-123")
+
 
 class TestSubcommands:
     def test_config_help(self):

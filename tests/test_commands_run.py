@@ -36,6 +36,25 @@ def _mock_client():
     return mock
 
 
+def _run(status="running", total_results=0):
+    return Run(
+        id=FULL_RUN_HASH, status=status, total_results=total_results,
+        total_unique_results=0, duration=0, credit_used=0, origin="api",
+        done_reason=None, done_reason_desc=None, export_done=False,
+        started_at="2025-01-01T00:00:00Z", ended_at=None,
+    )
+
+
+def _stats(is_done, pct="100%"):
+    s = MagicMock()
+    s.percent_done = pct
+    s.total_tasks = 1
+    s.total_tasks_done = 1 if is_done else 0
+    s.eta = ""
+    s.is_done = is_done
+    return s
+
+
 class TestRunStart:
     def test_start_run(self):
         mock = _mock_client()
@@ -62,6 +81,25 @@ class TestRunStart:
             result = runner.invoke(app, ["--json", "run", "start", "My Squid"])
         assert result.exit_code == 0
         assert FULL_RUN_HASH in result.output
+
+    def test_start_wait_completes(self):
+        mock = _mock_client()
+        mock.runs.start.return_value = _run("running")
+        mock.runs.stats.return_value = _stats(is_done=True)
+        mock.runs.get.return_value = _run("finished", total_results=100)
+        with patch("lobstr_cli.cli.get_client", return_value=mock):
+            result = runner.invoke(app, ["run", "start", "My Squid", "--wait", "--poll", "0.01"])
+        assert result.exit_code == 0
+        assert "finished" in result.output
+
+    def test_start_wait_timeout(self):
+        mock = _mock_client()
+        mock.runs.start.return_value = _run("running")
+        mock.runs.stats.return_value = _stats(is_done=False, pct="10%")  # never finishes
+        with patch("lobstr_cli.cli.get_client", return_value=mock):
+            result = runner.invoke(app, ["run", "start", "My Squid", "--timeout", "0", "--poll", "0.01"])
+        assert result.exit_code == 1
+        assert "did not finish" in result.output
 
 
 class TestRunLs:

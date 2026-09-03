@@ -14,8 +14,15 @@ from lobstr_cli.resolve import resolve_squid as _resolve_squid, require_full_has
 run_app = typer.Typer(no_args_is_help=True)
 
 
-def _poll_run(client, run_id: str, download_path: str | None = None):
-    """Poll a run until completion, showing a progress bar."""
+def _poll_run(client, run_id: str, download_path: str | None = None,
+              poll_interval: float = 3.0, timeout: float | None = None):
+    """Poll a run until completion, showing a progress bar.
+
+    If ``timeout`` (seconds) is set and the run hasn't finished by then, stop
+    waiting and exit non-zero — the run keeps going server-side.
+    """
+    start = time.monotonic()
+    timed_out = False
     with make_progress() as progress:
         task = progress.add_task("Running...", total=100)
         while True:
@@ -29,7 +36,15 @@ def _poll_run(client, run_id: str, download_path: str | None = None):
                           description=f"Running... {stats.total_tasks_done}/{stats.total_tasks} tasks  ETA: {stats.eta or '?'}")
             if stats.is_done:
                 break
-            time.sleep(3)
+            if timeout is not None and (time.monotonic() - start) >= timeout:
+                timed_out = True
+                break
+            time.sleep(poll_interval)
+
+    if timed_out:
+        print_error(f"Run did not finish within {timeout:g}s — still running server-side. "
+                    f"Resume with: lobstr run watch {run_id}")
+        raise typer.Exit(1)
 
     run = client.runs.get(run_id)
     if download_path:
@@ -46,19 +61,22 @@ def start_run(
     squid: str = typer.Argument(..., help="Squid hash or prefix"),
     wait: bool = typer.Option(False, "--wait", help="Poll until run completes"),
     download: Optional[str] = typer.Option(None, "--download", help="Download CSV on completion (implies --wait)"),
+    timeout: Optional[float] = typer.Option(None, "--timeout", help="Max seconds to wait before giving up (implies --wait); the run keeps going"),
+    poll: float = typer.Option(3.0, "--poll", help="Seconds between status polls while waiting"),
 ):
     """Start a new run."""
     from lobstr_cli.cli import get_client, _state
     client = get_client()
     squid_id = _resolve_squid(client, squid)
     result = client.runs.start(squid=squid_id)
-    if _state.get("json") and not (wait or download):
+    should_wait = wait or download or timeout is not None
+    if _state.get("json") and not should_wait:
         print_json(asdict(result))
         return
     print_success(f"Started run {result.id}")
-    if download or wait:
+    if should_wait:
         try:
-            run = _poll_run(client, result.id, download_path=download)
+            run = _poll_run(client, result.id, download_path=download, poll_interval=poll, timeout=timeout)
         except KeyboardInterrupt:
             print_info(f"\nInterrupted. Resume with: lobstr run watch {result.id}")
             raise typer.Exit(0)
@@ -214,13 +232,17 @@ def download_run(
 
 
 @run_app.command("watch")
-def watch_run(run_id: str = typer.Argument(..., help="Full run hash")):
+def watch_run(
+    run_id: str = typer.Argument(..., help="Full run hash"),
+    timeout: Optional[float] = typer.Option(None, "--timeout", help="Max seconds to wait before giving up; the run keeps going"),
+    poll: float = typer.Option(3.0, "--poll", help="Seconds between status polls"),
+):
     """Live-poll run progress with progress bar."""
     from lobstr_cli.cli import get_client, _state
     client = get_client()
     require_full_hash(run_id, "run")
     try:
-        run = _poll_run(client, run_id)
+        run = _poll_run(client, run_id, poll_interval=poll, timeout=timeout)
     except KeyboardInterrupt:
         print_info("\nStopped watching.")
         raise typer.Exit(0)

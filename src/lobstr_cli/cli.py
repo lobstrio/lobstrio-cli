@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from typing import Optional
 import typer
 
@@ -26,7 +27,10 @@ def get_client() -> LobstrClient:
         if not token:
             print_error("No API token. Run: lobstr config set-token <TOKEN>\n  Get your token at https://app.lobstr.io/dashboard/api")
             raise typer.Exit(1)
-        client = LobstrClient(token=token)
+        # LOBSTR_API_BASE lets you point the CLI at a staging / self-hosted API
+        # (e.g. a test server). Defaults to production when unset.
+        base_url = os.environ.get("LOBSTR_API_BASE")
+        client = LobstrClient(token=token, base_url=base_url) if base_url else LobstrClient(token=token)
         if _state.get("verbose"):
             import sys
             _orig_send = client._http._client.send
