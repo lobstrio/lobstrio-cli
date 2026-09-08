@@ -62,18 +62,27 @@ class TestGetClient:
         assert get_client() is mock_client
 
     def test_lobstr_api_base_env_overrides_base_url(self, monkeypatch):
+        from lobstr_cli.cli import USER_AGENT
         monkeypatch.setenv("LOBSTR_API_BASE", "http://127.0.0.1:8012/v1/")
         with patch("lobstr_cli.cli.get_token", return_value="test-token-123"), \
                 patch("lobstr_cli.cli.LobstrClient") as MockClient:
             get_client()
-        MockClient.assert_called_once_with(token="test-token-123", base_url="http://127.0.0.1:8012/v1/")
+        MockClient.assert_called_once_with(token="test-token-123",
+                                           base_url="http://127.0.0.1:8012/v1/",
+                                           user_agent=USER_AGENT)
 
     def test_no_api_base_uses_default(self, monkeypatch):
+        from lobstr_cli.cli import USER_AGENT
         monkeypatch.delenv("LOBSTR_API_BASE", raising=False)
         with patch("lobstr_cli.cli.get_token", return_value="test-token-123"), \
                 patch("lobstr_cli.cli.LobstrClient") as MockClient:
             get_client()
-        MockClient.assert_called_once_with(token="test-token-123")
+        MockClient.assert_called_once_with(token="test-token-123", user_agent=USER_AGENT)
+
+    def test_user_agent_identifies_the_cli(self):
+        from lobstr_cli.cli import USER_AGENT
+        # the API derives a squid's creation source (`cli`) from this header
+        assert USER_AGENT.startswith("lobstrio-cli/")
 
 
 class TestSubcommands:
