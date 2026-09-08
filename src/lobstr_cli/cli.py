@@ -19,6 +19,11 @@ app = typer.Typer(
 # Shared state
 _state: dict = {}
 
+# Identify the CLI to the API via the User-Agent. The backend attributes requests
+# from this header — e.g. it records a squid's creation source (`cli`) from it.
+# Passed to the SDK, which forwards a caller-supplied user_agent verbatim.
+USER_AGENT = f"lobstrio-cli/{__version__}"
+
 
 def get_client() -> LobstrClient:
     """Get or create the SDK client from global state."""
@@ -30,7 +35,8 @@ def get_client() -> LobstrClient:
         # LOBSTR_API_BASE lets you point the CLI at a staging / self-hosted API
         # (e.g. a test server). Defaults to production when unset.
         base_url = os.environ.get("LOBSTR_API_BASE")
-        client = LobstrClient(token=token, base_url=base_url) if base_url else LobstrClient(token=token)
+        client = (LobstrClient(token=token, base_url=base_url, user_agent=USER_AGENT)
+                  if base_url else LobstrClient(token=token, user_agent=USER_AGENT))
         if _state.get("verbose"):
             import sys
             _orig_send = client._http._client.send
