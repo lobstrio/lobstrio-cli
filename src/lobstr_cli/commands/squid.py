@@ -80,6 +80,32 @@ def show_squid(squid: str = typer.Argument(..., help="Squid hash or prefix")):
     ])
 
 
+@squid_app.command("estimate")
+def estimate_squid(squid: str = typer.Argument(..., help="Squid hash or prefix")):
+    """Estimate the cost and results of running a squid (needs at least one task)."""
+    from lobstr_cli.cli import get_client, _state
+    client = get_client()
+    squid_id = _resolve_squid(client, squid)
+    est = client.squids.estimate(squid_id)
+    if _state.get("json"):
+        print_json(est)
+        return
+    services = est.get("services") or []
+    if services:
+        rows = [[s.get("name"), str(s.get("results")), str(s.get("credits"))] for s in services]
+        print_table(["Service", "Results", "Credits"], rows)
+    tasks = est.get("tasks") or {}
+    print_detail([
+        ("Total Credits", est.get("total_credits")),
+        ("Estimated Time", est.get("estimated_time") or "—"),
+        ("Max Results", est.get("max_results")),
+        ("Tasks", tasks.get("count")),
+    ])
+    rec = est.get("recommended_upgrade_plan")
+    if rec:
+        typer.echo(f"Not enough credits for this run — suggested plan: {rec.get('name')} (${rec.get('price')})")
+
+
 @squid_app.command("update")
 def update_squid(
     squid: str = typer.Argument(..., help="Squid hash or prefix"),
@@ -88,6 +114,19 @@ def update_squid(
     notify: Optional[str] = typer.Option(None, "--notify", help="on_success|on_error|null"),
     unique_results: Optional[bool] = typer.Option(None, "--unique-results/--no-unique-results"),
     param: Optional[list[str]] = typer.Option(None, "--param", help="KEY=VALUE, repeatable"),
+    active: Optional[bool] = typer.Option(
+        None, "--active/--inactive", help="Activate or deactivate the squid (frees its slot)"
+    ),
+    to_complete: Optional[int] = typer.Option(
+        None, "--to-complete", help="Number of tasks queued to run"
+    ),
+    no_line_breaks: Optional[bool] = typer.Option(
+        None, "--no-line-breaks/--line-breaks", help="Strip newlines from exported cells"
+    ),
+    cron: Optional[str] = typer.Option(None, "--cron", help="Cron expression to schedule runs"),
+    timezone: Optional[str] = typer.Option(
+        None, "--timezone", help="Timezone for the cron schedule, e.g. Europe/Paris"
+    ),
 ):
     """Update squid configuration."""
     from lobstr_cli.cli import get_client, _state
@@ -105,6 +144,16 @@ def update_squid(
     if param:
         from lobstr_cli.resolve import parse_params
         kwargs["params"] = parse_params(param)
+    if active is not None:
+        kwargs["is_active"] = active
+    if to_complete is not None:
+        kwargs["to_complete"] = to_complete
+    if no_line_breaks is not None:
+        kwargs["no_line_breaks"] = no_line_breaks
+    if cron is not None:
+        kwargs["cron_expression"] = cron
+    if timezone is not None:
+        kwargs["timezone"] = timezone
     if not kwargs:
         print_error("No options specified. Use --help to see available options.")
         raise typer.Exit(1)

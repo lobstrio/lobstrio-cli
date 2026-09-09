@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.2] - 2026-09-09
+
+### Added
+
+- `squid estimate <id>` — authoritative pre-run cost/result estimate from the API
+  (per-service credits, total credits, estimated time, projected max results,
+  task count). The squid must have at least one task.
+- `squid update` gains `--active/--inactive`, `--to-complete`, the
+  `--no-line-breaks/--line-breaks` export toggle, `--cron`, and `--timezone`.
+
+### Changed
+
+- Require `lobstrio-sdk>=0.5.0` (adds `squids.estimate()` and the new
+  `squids.update()` fields).
+
 ## [0.5.1] - 2026-09-08
 
 ### Added
