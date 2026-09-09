@@ -193,6 +193,50 @@ class TestSquidUpdate:
             result = runner.invoke(app, ["squid", "update", "My Squid"])
         assert result.exit_code == 1
 
+    def test_update_new_fields(self):
+        mock = _mock_client()
+        mock.squids.update.return_value = SQUIDS[0]
+        with patch("lobstr_cli.cli.get_client", return_value=mock):
+            result = runner.invoke(app, [
+                "squid", "update", "My Squid",
+                "--inactive", "--to-complete", "50", "--no-line-breaks",
+                "--cron", "0 9 * * 1", "--timezone", "Europe/Paris",
+            ])
+        assert result.exit_code == 0
+        kwargs = mock.squids.update.call_args[1]
+        assert kwargs["is_active"] is False
+        assert kwargs["to_complete"] == 50
+        assert kwargs["no_line_breaks"] is True
+        assert kwargs["cron_expression"] == "0 9 * * 1"
+        assert kwargs["timezone"] == "Europe/Paris"
+
+
+class TestSquidEstimate:
+    ESTIMATE = {
+        "services": [{"name": "Google Maps data", "results": 300, "credits": 300}],
+        "total_credits": 300, "estimated_time": "5 mins - 12 mins",
+        "max_results": 800, "tasks": {"count": 8, "preview": []},
+        "recommended_upgrade_plan": None,
+    }
+
+    def test_estimate(self):
+        mock = _mock_client()
+        mock.squids.estimate.return_value = self.ESTIMATE
+        with patch("lobstr_cli.cli.get_client", return_value=mock):
+            result = runner.invoke(app, ["squid", "estimate", "My Squid"])
+        assert result.exit_code == 0
+        mock.squids.estimate.assert_called_once_with("squid1abc123def456")
+        assert "300" in result.output
+
+    def test_estimate_json(self):
+        mock = _mock_client()
+        mock.squids.estimate.return_value = self.ESTIMATE
+        _state["json"] = True
+        with patch("lobstr_cli.cli.get_client", return_value=mock):
+            result = runner.invoke(app, ["--json", "squid", "estimate", "My Squid"])
+        assert result.exit_code == 0
+        assert '"total_credits"' in result.output
+
 
 class TestSquidEmpty:
     def test_empty_squid(self):
