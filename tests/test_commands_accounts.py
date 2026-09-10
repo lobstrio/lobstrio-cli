@@ -38,6 +38,7 @@ def clean_state():
 def _mock_client():
     mock = MagicMock()
     mock.accounts.list.return_value = ACCOUNTS
+    mock.accounts.iter.return_value = ACCOUNTS
     return mock
 
 

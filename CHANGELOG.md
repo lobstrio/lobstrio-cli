@@ -5,6 +5,37 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.0] - 2026-09-10
+
+### Fixed
+
+- `crawlers ls`, `crawlers search`, `crawlers show`, `crawlers params`,
+  `crawlers attrs`, `squid create`, and `go` only ever saw the **first page**
+  of the crawler catalog — 50 of ~183 crawlers. Any crawler past page 1 (e.g.
+  the LinkedIn Profile & Email Scraper (No Login), on page 4) could not be
+  listed, searched, shown, or instantiated from the CLI. These commands now
+  walk every page.
+
+  The catalog was never restricted to crawlers assigned to the account: the
+  full store was always reachable, just page-capped. The API offers no
+  server-side search and caps `limit` at 120, so paging is the only fix.
+
+- `crawlers show/params/attrs <full-32-char-hash>` failed with
+  `No match for prefix` even for a valid hash, because the hash was validated
+  against that same first page. A complete hash now goes straight to the API,
+  which also makes it a single request instead of a full catalog walk. An
+  unknown hash surfaces the API's own 404.
+
+- Resolving a squid by name/prefix or an account by username also read only the
+  first page, so anything past the 50th was invisible. Both now paginate.
+
+### Changed
+
+- `crawlers search` matches the slug as well as the name, so
+  `crawlers search no-login` works and not just `crawlers search "no login"`.
+
+- Require `lobstrio-sdk>=0.6.0` (adds `accounts.iter()`).
+
 ## [0.5.2] - 2026-09-09
 
 ### Added

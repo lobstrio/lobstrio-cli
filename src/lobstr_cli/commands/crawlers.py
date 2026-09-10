@@ -12,8 +12,9 @@ crawlers_app = typer.Typer(no_args_is_help=True)
 def list_crawlers():
     """List all available crawlers."""
     from lobstr_cli.cli import get_client, _state
+    from lobstr_cli.resolve import fetch_crawlers
     client = get_client()
-    crawlers = client.crawlers.list()
+    crawlers = fetch_crawlers(client)
     if _state.get("json"):
         print_json([asdict(c) for c in crawlers])
         return
@@ -42,10 +43,9 @@ def list_crawlers():
 def show_crawler(crawler: str = typer.Argument(..., help="Crawler slug, hash, or name")):
     """Show crawler details."""
     from lobstr_cli.cli import get_client, _state
-    from lobstr_cli.resolve import resolve_crawler
+    from lobstr_cli.resolve import resolve_crawler_id
     client = get_client()
-    all_crawlers = client.crawlers.list()
-    crawler_id = resolve_crawler(crawler, all_crawlers)
+    crawler_id = resolve_crawler_id(client, crawler)
     data = client.crawlers.get(crawler_id)
     if _state.get("json"):
         print_json(asdict(data))
@@ -113,10 +113,9 @@ def show_crawler(crawler: str = typer.Argument(..., help="Crawler slug, hash, or
 def crawler_params(crawler: str = typer.Argument(..., help="Crawler hash or prefix")):
     """Show parameters for a crawler."""
     from lobstr_cli.cli import get_client, _state
-    from lobstr_cli.resolve import resolve_crawler
+    from lobstr_cli.resolve import resolve_crawler_id
     client = get_client()
-    all_crawlers = client.crawlers.list()
-    crawler_id = resolve_crawler(crawler, all_crawlers)
+    crawler_id = resolve_crawler_id(client, crawler)
     params = client.crawlers.params(crawler_id)
     if _state.get("json"):
         print_json(asdict(params))
@@ -161,10 +160,9 @@ def crawler_attributes(crawler: str = typer.Argument(..., help="Crawler slug, ha
     """Show result attributes (columns) for a crawler."""
     from collections import OrderedDict
     from lobstr_cli.cli import get_client, _state
-    from lobstr_cli.resolve import resolve_crawler
+    from lobstr_cli.resolve import resolve_crawler_id
     client = get_client()
-    all_crawlers = client.crawlers.list()
-    crawler_id = resolve_crawler(crawler, all_crawlers)
+    crawler_id = resolve_crawler_id(client, crawler)
     attrs = client.crawlers.attributes(crawler_id)
     if _state.get("json"):
         print_json([asdict(a) for a in attrs])
@@ -203,12 +201,16 @@ def crawler_attributes(crawler: str = typer.Argument(..., help="Crawler slug, ha
 
 @crawlers_app.command("search")
 def search_crawlers(keyword: str = typer.Argument(..., help="Search keyword")):
-    """Search crawlers by name."""
+    """Search crawlers by name or slug."""
     from lobstr_cli.cli import get_client, _state
+    from lobstr_cli.resolve import fetch_crawlers
     client = get_client()
-    crawlers = client.crawlers.list()
+    crawlers = fetch_crawlers(client)
     lower = keyword.lower()
-    matches = [c for c in crawlers if lower in c.name.lower()]
+    matches = [
+        c for c in crawlers
+        if lower in c.name.lower() or lower in (c.slug or "").lower()
+    ]
     if _state.get("json"):
         print_json([asdict(c) for c in matches])
         return

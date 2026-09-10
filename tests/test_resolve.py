@@ -144,7 +144,7 @@ class TestMatchName:
 class TestResolveSquid:
     def _mock_client(self, squids):
         mock = MagicMock()
-        mock.squids.list.return_value = squids
+        mock.squids.iter.return_value = squids
         return mock
 
     def test_resolve_by_hash_prefix(self):
@@ -417,20 +417,45 @@ class TestMatchUsername:
 class TestResolveAccount:
     def test_resolve_by_hash_prefix(self):
         client = MagicMock()
-        client.accounts.list.return_value = [{"id": "aabb11cc22dd", "username": "johndoe"}]
+        client.accounts.iter.return_value = [{"id": "aabb11cc22dd", "username": "johndoe"}]
         assert resolve_account(client, "aabb11") == "aabb11cc22dd"
 
     def test_resolve_by_username(self):
         client = MagicMock()
-        client.accounts.list.return_value = [{"id": "acc123", "username": "johndoe"}]
+        client.accounts.iter.return_value = [{"id": "acc123", "username": "johndoe"}]
         assert resolve_account(client, "johndoe") == "acc123"
 
     def test_hex_falls_back_to_username(self):
         client = MagicMock()
-        client.accounts.list.return_value = [{"id": "xyz789", "username": "deadbeef"}]
+        client.accounts.iter.return_value = [{"id": "xyz789", "username": "deadbeef"}]
         assert resolve_account(client, "deadbeef") == "xyz789"
 
     def test_hex_prefers_hash_over_username(self):
         client = MagicMock()
-        client.accounts.list.return_value = [{"id": "deadbeef1234", "username": "deadbeef"}]
+        client.accounts.iter.return_value = [{"id": "deadbeef1234", "username": "deadbeef"}]
         assert resolve_account(client, "deadbeef") == "deadbeef1234"
+
+
+# --- pagination: list() returns one page, so resolution must use iter() ---
+
+
+class TestResolvePaginates:
+    def test_resolve_squid_looks_past_first_page(self):
+        mock = MagicMock()
+        mock.squids.list.return_value = [{"id": "aaa111", "name": "Page One"}]
+        mock.squids.iter.return_value = [
+            {"id": "aaa111", "name": "Page One"},
+            {"id": "bbb222", "name": "Page Two"},
+        ]
+        assert resolve_squid(mock, "Page Two") == "bbb222"
+        mock.squids.list.assert_not_called()
+
+    def test_resolve_account_looks_past_first_page(self):
+        mock = MagicMock()
+        mock.accounts.list.return_value = [{"id": "aaa111", "username": "first@x.com"}]
+        mock.accounts.iter.return_value = [
+            {"id": "aaa111", "username": "first@x.com"},
+            {"id": "bbb222", "username": "second@x.com"},
+        ]
+        assert resolve_account(mock, "second@x.com") == "bbb222"
+        mock.accounts.list.assert_not_called()

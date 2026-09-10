@@ -18,9 +18,8 @@ def create_squid(
     """Create a new squid for a crawler."""
     from lobstr_cli.cli import get_client, _state
     client = get_client()
-    all_crawlers = client.crawlers.list()
-    from lobstr_cli.resolve import resolve_crawler
-    crawler_id = resolve_crawler(crawler, all_crawlers)
+    from lobstr_cli.resolve import resolve_crawler_id
+    crawler_id = resolve_crawler_id(client, crawler)
     result = client.squids.create(crawler_id, name=name)
     if _state.get("json"):
         print_json(asdict(result))

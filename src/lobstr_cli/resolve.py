@@ -16,6 +16,38 @@ def require_full_hash(value: str, label: str = "resource") -> None:
         raise SystemExit(1)
 
 
+FULL_HASH_LEN = 32
+
+
+def _is_hex(value: str) -> bool:
+    return bool(value) and all(c in "0123456789abcdef" for c in value.lower())
+
+
+def fetch_crawlers(client) -> list[Any]:
+    """Fetch the whole crawler catalog.
+
+    ``crawlers.list()`` returns a single page (50 of ~183), so anything past
+    page 1 is invisible to it. The catalog has no server-side search and the
+    API caps ``limit`` at 120, so walking every page is the only way to see it
+    all.
+    """
+    return list(client.crawlers.iter())
+
+
+def resolve_crawler_id(client, identifier: str) -> str:
+    """Resolve a crawler identifier to its hash.
+
+    A complete 32-character hash is used as-is: the API can serve it directly,
+    so there is no reason to walk the catalog to confirm it exists (and a hash
+    for a crawler past page 1 used to be rejected for that reason). A wrong
+    hash surfaces as a clean API error. Anything else — slug, name, prefix —
+    needs the catalog, which is fetched lazily.
+    """
+    if len(identifier) == FULL_HASH_LEN and _is_hex(identifier):
+        return identifier.lower()
+    return resolve_crawler(identifier, fetch_crawlers(client))
+
+
 def match_hash_prefix(prefix: str, items: list[Any], key: str = "id") -> str:
     """Match by hash prefix. Items can be dicts or model objects."""
     def _get(item: Any, k: str) -> str:
@@ -76,8 +108,8 @@ def match_name(name: str, items: list[Any], label: str = "squid") -> str:
 def resolve_squid(client, identifier: str) -> str:
     from lobstr_cli.config import resolve_alias
     identifier = resolve_alias(identifier)
-    items = client.squids.list()
-    if all(c in "0123456789abcdef" for c in identifier.lower()):
+    items = list(client.squids.iter())
+    if _is_hex(identifier):
         try:
             return match_hash_prefix(identifier.lower(), items)
         except SystemExit:
@@ -102,8 +134,8 @@ def match_username(username: str, items: list[Any], label: str = "account") -> s
 
 
 def resolve_account(client, identifier: str) -> str:
-    items = client.accounts.list()
-    if all(c in "0123456789abcdef" for c in identifier.lower()):
+    items = list(client.accounts.iter())
+    if _is_hex(identifier):
         try:
             return match_hash_prefix(identifier.lower(), items)
         except SystemExit:
@@ -116,7 +148,7 @@ def match_crawler_name(name: str, crawlers: list[Any]) -> str:
 
 
 def resolve_crawler(identifier: str, crawlers: list[Any]) -> str:
-    if all(c in "0123456789abcdef" for c in identifier.lower()):
+    if _is_hex(identifier):
         try:
             return match_hash_prefix(identifier.lower(), crawlers)
         except SystemExit:
