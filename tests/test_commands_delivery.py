@@ -33,6 +33,7 @@ def clean_state():
 def _mock_client():
     mock = MagicMock()
     mock.squids.list.return_value = SQUIDS
+    mock.squids.iter.return_value = SQUIDS
     return mock
 
 

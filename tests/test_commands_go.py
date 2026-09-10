@@ -33,7 +33,9 @@ def _mock_client(squids_by_name=None):
     """Create a mock client for go command tests."""
     mock = MagicMock()
     mock.crawlers.list.return_value = CRAWLERS
+    mock.crawlers.iter.return_value = CRAWLERS
     mock.squids.list.return_value = squids_by_name or []
+    mock.squids.iter.return_value = squids_by_name or []
     mock.squids.create.return_value = Squid(
         id="newsquid123", name="Test Squid", crawler="crawler1abc",
         crawler_name="Google Maps Leads Scraper", is_active=True, is_ready=False,

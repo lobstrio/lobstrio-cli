@@ -35,6 +35,7 @@ def clean_state():
 def _mock_client(results=None):
     mock = MagicMock()
     mock.squids.list.return_value = SQUIDS
+    mock.squids.iter.return_value = SQUIDS
     mock.results.list.return_value = results if results is not None else RESULTS
     return mock
 

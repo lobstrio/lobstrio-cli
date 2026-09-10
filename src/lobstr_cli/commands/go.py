@@ -43,10 +43,9 @@ def go(
 
     # 1. Resolve crawler
     print_info("Resolving crawler...")
-    all_crawlers = client.crawlers.list()
-    from lobstr_cli.resolve import resolve_crawler
-    crawler_id = resolve_crawler(crawler, all_crawlers)
-    crawler_name = next((c.name for c in all_crawlers if c.id == crawler_id), crawler_id[:12])
+    from lobstr_cli.resolve import resolve_crawler_id
+    crawler_id = resolve_crawler_id(client, crawler)
+    crawler_name = client.crawlers.get(crawler_id).name
     print_info(f"Using crawler: {crawler_name}")
 
     # 2. Gather inputs

@@ -40,7 +40,9 @@ def clean_state():
 def _mock_client():
     mock = MagicMock()
     mock.squids.list.return_value = SQUIDS
+    mock.squids.iter.return_value = SQUIDS
     mock.crawlers.list.return_value = CRAWLERS
+    mock.crawlers.iter.return_value = CRAWLERS
     return mock
 
 
@@ -161,6 +163,7 @@ class TestSquidShow:
         ]
         mock = MagicMock()
         mock.squids.list.return_value = squids
+        mock.squids.iter.return_value = squids
         mock.squids.get.return_value = squids[0]
         with patch("lobstr_cli.cli.get_client", return_value=mock):
             result = runner.invoke(app, ["squid", "show", "aabb11"])

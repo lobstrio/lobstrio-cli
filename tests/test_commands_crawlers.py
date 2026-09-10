@@ -36,6 +36,7 @@ def clean_state():
 def _mock_client():
     mock = MagicMock()
     mock.crawlers.list.return_value = SAMPLE_CRAWLERS
+    mock.crawlers.iter.return_value = SAMPLE_CRAWLERS
     return mock
 
 
@@ -72,6 +73,7 @@ class TestCrawlersLs:
         ]
         mock = MagicMock()
         mock.crawlers.list.return_value = crawlers
+        mock.crawlers.iter.return_value = crawlers
         with patch("lobstr_cli.cli.get_client", return_value=mock):
             result = runner.invoke(app, ["crawlers", "ls"])
         assert result.exit_code == 0
@@ -287,6 +289,80 @@ class TestCrawlersParamsAmbiguous:
         ]
         mock = MagicMock()
         mock.crawlers.list.return_value = crawlers
+        mock.crawlers.iter.return_value = crawlers
         with patch("lobstr_cli.cli.get_client", return_value=mock):
             result = runner.invoke(app, ["crawlers", "params", "google-maps"])
         assert result.exit_code != 0
+
+
+# --- pagination: the catalog spans several pages (183 crawlers, 50/page) ---
+
+# A crawler that only exists past the first page — the No-Login LinkedIn
+# scraper is on page 4 of the live catalog.
+PAGE_4_CRAWLER = Crawler(
+    id="e7c4200bab5942e5329f711e26c0666b",
+    name="LinkedIn Profile & Email Scraper (No Login)",
+    slug="linkedin-profile-email-scraper-no-login", description=None,
+    credits_per_row=1, credits_per_email=None, max_concurrency=5,
+    account=False, has_email_verification=False, is_public=True,
+    is_premium=False, is_available=True, has_issues=False, rank=3,
+)
+
+
+def _mock_paginated_client():
+    """Client whose first page omits a crawler that iter() reaches."""
+    mock = MagicMock()
+    mock.crawlers.list.return_value = SAMPLE_CRAWLERS          # page 1 only
+    mock.crawlers.iter.return_value = SAMPLE_CRAWLERS + [PAGE_4_CRAWLER]
+    return mock
+
+
+class TestCrawlersPagination:
+    def test_ls_shows_crawlers_beyond_first_page(self):
+        mock = _mock_paginated_client()
+        with patch("lobstr_cli.cli.get_client", return_value=mock):
+            result = runner.invoke(app, ["--json", "crawlers", "ls"])
+        assert result.exit_code == 0
+        assert "e7c4200bab5942e5329f711e26c0666b" in result.output
+        mock.crawlers.list.assert_not_called()
+
+    def test_search_finds_crawler_beyond_first_page(self):
+        mock = _mock_paginated_client()
+        with patch("lobstr_cli.cli.get_client", return_value=mock):
+            result = runner.invoke(app, ["--json", "crawlers", "search", "no login"])
+        assert result.exit_code == 0
+        assert "linkedin-profile-email-scraper-no-login" in result.output
+
+    def test_search_matches_slug_not_only_name(self):
+        mock = _mock_paginated_client()
+        with patch("lobstr_cli.cli.get_client", return_value=mock):
+            result = runner.invoke(app, ["--json", "crawlers", "search", "no-login"])
+        assert result.exit_code == 0
+        assert "linkedin-profile-email-scraper-no-login" in result.output
+
+    def test_show_resolves_slug_beyond_first_page(self):
+        mock = _mock_paginated_client()
+        mock.crawlers.get.return_value = PAGE_4_CRAWLER
+        with patch("lobstr_cli.cli.get_client", return_value=mock):
+            result = runner.invoke(
+                app, ["crawlers", "show", "linkedin-profile-email-scraper-no-login"]
+            )
+        assert result.exit_code == 0
+        mock.crawlers.get.assert_called_once_with(
+            "e7c4200bab5942e5329f711e26c0666b"
+        )
+
+    def test_show_accepts_full_hash_without_listing_catalog(self):
+        """A complete 32-char hash goes straight to the API — no catalog walk."""
+        mock = _mock_paginated_client()
+        mock.crawlers.get.return_value = PAGE_4_CRAWLER
+        with patch("lobstr_cli.cli.get_client", return_value=mock):
+            result = runner.invoke(
+                app, ["crawlers", "show", "e7c4200bab5942e5329f711e26c0666b"]
+            )
+        assert result.exit_code == 0
+        mock.crawlers.get.assert_called_once_with(
+            "e7c4200bab5942e5329f711e26c0666b"
+        )
+        mock.crawlers.iter.assert_not_called()
+        mock.crawlers.list.assert_not_called()
