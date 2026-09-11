@@ -12,10 +12,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `go` on a crawler whose squid-level params are all optional (e.g.
   `linkedin-profile-email-scraper-no-login`) failed with `SquidNotReady` when
   no `--param`/`--concurrency` was passed. A squid is created with
-  `is_ready=false`; only a `POST /squids/{hash}` update flips it, and `go`
-  only made that call when it had `--param`/`--concurrency` to send. `go` now
-  always sends the update for a squid it just created (an empty body is
-  enough to mark it ready), even with no options given.
+  `is_ready=false`, and `POST /squids/{hash}` only flips it when the update
+  actually persists a field — an empty body, or `{"params": {}}`, is a
+  no-op on the API side, so `go`'s previous fix (always sending the update
+  call, even empty) did not actually fix anything. `go` now fetches the
+  crawler's squid-level params and sends them all (the user's `--param`
+  value, or `null` for the ones left unset) so the update body is never
+  empty; a crawler with no squid-level params at all (e.g.
+  `httpbin-get-json`) instead re-sends the squid's own name, which the API
+  always persists. A squid param marked required is never sent as `null`:
+  if the user didn't pass it with `--param`, `go` now fails before creating
+  the squid, naming the missing param(s), instead of creating an orphaned
+  squid and failing later with `ParamsNeeded` or `SquidNotReady`.
 
 ## [0.6.0] - 2026-09-10
 
