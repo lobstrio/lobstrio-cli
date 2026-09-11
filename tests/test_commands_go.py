@@ -1,8 +1,10 @@
 import pytest
+import httpx
 from unittest.mock import patch, MagicMock
 from typer.testing import CliRunner
 
 from lobstr_cli.cli import app, _state
+from lobstrio import LobstrClient
 from lobstrio.models.crawler import Crawler
 from lobstrio.models.squid import Squid
 from lobstrio.models.task import Task, AddTasksResult
@@ -196,3 +198,96 @@ class TestGoCleanup:
             result = runner.invoke(app, ["go", "Google Maps", "https://a.com"])
         assert result.exit_code != 0
         mock.squids.delete.assert_called_once()
+
+
+CRAWLER_HASH = "a" * 32
+SQUID_HASH = "b" * 32
+
+
+def _fake_api_server():
+    """A tiny stateful fake of the parts of the API `go` touches.
+
+    Mirrors the real API's ``UpdateDeleteClustersView``: a squid is created
+    with ``is_ready=False`` and only a ``POST /squids/{hash}`` update (even
+    with an empty body) flips it to ``True``; ``POST /runs`` on a not-ready
+    squid answers 400 ``SquidNotReady``. Records every request in order.
+    """
+    calls: list[tuple[str, str]] = []
+    state = {"is_ready": False}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        method, path = request.method, request.url.path
+        calls.append((method, path))
+
+        if method == "GET" and path == f"/v1/crawlers/{CRAWLER_HASH}":
+            return httpx.Response(200, json={
+                "id": CRAWLER_HASH, "name": "LinkedIn Profile & Email Scraper (No Login)",
+                "slug": "linkedin-profile-email-scraper-no-login",
+            })
+        if method == "POST" and path == "/v1/squids":
+            return httpx.Response(200, json={
+                "id": SQUID_HASH, "name": "go-squid", "crawler": CRAWLER_HASH,
+                "crawler_name": "LinkedIn Profile & Email Scraper (No Login)",
+                "is_active": True, "is_ready": state["is_ready"], "concurrency": 1,
+                "params": {},
+            })
+        if method == "POST" and path == f"/v1/squids/{SQUID_HASH}":
+            # Matches the API: any POST to the update route flips is_ready,
+            # even with an empty body — no squid-level params required.
+            state["is_ready"] = True
+            return httpx.Response(200, json={})
+        if method == "GET" and path == f"/v1/squids/{SQUID_HASH}":
+            return httpx.Response(200, json={
+                "id": SQUID_HASH, "name": "go-squid", "crawler": CRAWLER_HASH,
+                "crawler_name": "LinkedIn Profile & Email Scraper (No Login)",
+                "is_active": True, "is_ready": state["is_ready"], "concurrency": 1,
+                "params": {},
+            })
+        if method == "POST" and path == "/v1/tasks":
+            import json as _json
+            tasks = _json.loads(request.content)["tasks"]
+            return httpx.Response(200, json={
+                "tasks": [{"id": f"t{i}", "params": t} for i, t in enumerate(tasks)],
+                "duplicated_count": 0,
+            })
+        if method == "POST" and path == "/v1/runs":
+            if not state["is_ready"]:
+                return httpx.Response(400, json={"error": "SquidNotReady: squid is not ready"})
+            return httpx.Response(200, json={
+                "id": "c" * 32, "status": "running", "total_results": 0,
+                "total_unique_results": 0, "duration": 0, "credit_used": 0,
+                "origin": "api", "export_done": False,
+            })
+        if method == "DELETE" and path == f"/v1/squids/{SQUID_HASH}":
+            return httpx.Response(200, json={})
+
+        raise AssertionError(f"unexpected request: {method} {path}")
+
+    return handler, calls
+
+
+class TestGoSquidReadiness:
+    """`go` on a crawler with no required squid params, and no --param/-c given
+    (Ijaz's `linkedin-profile-email-scraper-no-login` report)."""
+
+    def test_go_without_squid_params_still_makes_the_squid_ready_before_run(self):
+        handler, calls = _fake_api_server()
+        client = LobstrClient(token="t", transport=httpx.MockTransport(handler))
+        with patch("lobstr_cli.cli.get_client", return_value=client):
+            result = runner.invoke(app, [
+                "go", CRAWLER_HASH, "https://linkedin.com/in/someone", "--no-download",
+            ])
+
+        assert result.exit_code == 0, result.output
+
+        update_idx = next(
+            (i for i, (m, p) in enumerate(calls) if m == "POST" and p == f"/v1/squids/{SQUID_HASH}"),
+            None,
+        )
+        run_idx = next(i for i, (m, p) in enumerate(calls) if m == "POST" and p == "/v1/runs")
+
+        assert update_idx is not None, (
+            "no POST /v1/squids/{hash} update was ever sent — the squid stays "
+            "is_ready=false and POST /v1/runs raises SquidNotReady"
+        )
+        assert update_idx < run_idx, "squid update must happen before the run is started"

@@ -86,7 +86,15 @@ def go(
         if param:
             from lobstr_cli.resolve import parse_params
             update_kwargs["params"] = parse_params(param)
-        if update_kwargs:
+        # A freshly created squid starts with is_ready=false; only a
+        # POST /squids/{hash} update — even with an empty body — flips it.
+        # Without --param/--concurrency, update_kwargs is empty and this call
+        # used to be skipped entirely, so runs.start() below failed with
+        # SquidNotReady on any crawler whose squid-level params are all
+        # optional (e.g. linkedin-profile-email-scraper-no-login). A reused
+        # squid (found by --name) is already ready, so only update it when
+        # the user actually asked to change something.
+        if update_kwargs or created_new_squid:
             client.squids.update(squid_id, **update_kwargs)
 
         # 5. Add tasks

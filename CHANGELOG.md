@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.1] - 2026-09-11
+
+### Fixed
+
+- `go` on a crawler whose squid-level params are all optional (e.g.
+  `linkedin-profile-email-scraper-no-login`) failed with `SquidNotReady` when
+  no `--param`/`--concurrency` was passed. A squid is created with
+  `is_ready=false`; only a `POST /squids/{hash}` update flips it, and `go`
+  only made that call when it had `--param`/`--concurrency` to send. `go` now
+  always sends the update for a squid it just created (an empty body is
+  enough to mark it ready), even with no options given.
+
 ## [0.6.0] - 2026-09-10
 
 ### Fixed
