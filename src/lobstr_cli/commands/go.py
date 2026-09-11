@@ -41,9 +41,10 @@ def go(
     from lobstr_cli.cli import get_client, _state
     client = get_client()
 
+    from lobstr_cli.resolve import resolve_crawler_id, parse_params
+
     # 1. Resolve crawler
     print_info("Resolving crawler...")
-    from lobstr_cli.resolve import resolve_crawler_id
     crawler_id = resolve_crawler_id(client, crawler)
     crawler_name = client.crawlers.get(crawler_id).name
     print_info(f"Using crawler: {crawler_name}")
@@ -60,9 +61,12 @@ def go(
         print_error("No inputs provided. Pass URLs/keywords as arguments or use --file.")
         raise typer.Exit(1)
 
+    user_params = parse_params(param) if param else {}
+
     squid_id = None
     run_id = None
     created_new_squid = False
+    squid_params_meta = None
     try:
         # 3. Find existing or create squid
         existing = _find_squid_by_name(client, name, crawler_id) if name else None
@@ -73,6 +77,25 @@ def go(
                 client.squids.empty(squid_id, type="url")
                 print_info("Emptied old tasks")
         else:
+            # Fetch the crawler's squid-level params before creating
+            # anything. A required squid param sent as null raises
+            # ParamsNeeded from the API (apiviews.py ~l.5608), so a missing
+            # required value must fail here, before an orphaned squid is
+            # created — not surface later as a confusing error from
+            # squids.update() or runs.start().
+            squid_params_meta = client.crawlers.params(crawler_id)
+            missing_required = sorted(
+                k for k, v in squid_params_meta.squid_params.items()
+                if k != "account" and isinstance(v, dict) and v.get("required")
+                and user_params.get(k) is None
+            )
+            if missing_required:
+                print_error(
+                    f"{crawler_name} requires squid param(s): {', '.join(missing_required)}. "
+                    "Pass them with --param KEY=VALUE."
+                )
+                raise typer.Exit(1)
+
             print_info(f"Creating squid ({len(task_inputs)} tasks)...")
             squid_obj = client.squids.create(crawler_id, name=name)
             squid_id = squid_obj.id
@@ -83,9 +106,38 @@ def go(
         update_kwargs: dict = {}
         if concurrency is not None:
             update_kwargs["concurrency"] = concurrency
-        if param:
-            from lobstr_cli.resolve import parse_params
-            update_kwargs["params"] = parse_params(param)
+
+        # A freshly created squid starts with is_ready=false server-side.
+        # `POST /squids/{hash}` only flips it when the update actually
+        # persists a field (`UpdateDeleteClustersView.update()` only calls
+        # `cluster.save()` when it built a non-empty `json_data`); an empty
+        # body `{}`, or `{"params": {}}`, or `--concurrency` set to the
+        # value the squid already has, are all no-ops and leave the squid
+        # not ready, so `runs.start()` below then fails with SquidNotReady.
+        # Send every *optional* squid-level param the crawler declares
+        # (the user's value, or None for the ones they didn't set — the
+        # API's own `params` handler treats a non-empty dict as a change
+        # even when every value is None); required params always carry the
+        # user's real value, checked above, never None. A crawler with no
+        # squid-level params at all (e.g. httpbin-get-json) has nothing to
+        # put there, so fall back to re-sending the squid's own name:
+        # `update()` writes it to `json_data` unconditionally, and setting
+        # it to its current value has no visible effect.
+        if created_new_squid:
+            squid_level_keys = list(squid_params_meta.squid_params.keys())
+            if squid_level_keys:
+                params_dict = {k: None for k in squid_level_keys}
+                params_dict.update(user_params)
+                update_kwargs["params"] = params_dict
+            elif user_params:
+                update_kwargs["params"] = user_params
+            else:
+                update_kwargs["name"] = squid_obj.name
+        elif user_params:
+            update_kwargs["params"] = user_params
+
+        # A reused squid (found by --name) is already ready, so only touch
+        # it when the user asked to change something.
         if update_kwargs:
             client.squids.update(squid_id, **update_kwargs)
 
