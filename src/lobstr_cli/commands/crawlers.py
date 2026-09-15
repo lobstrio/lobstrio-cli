@@ -8,6 +8,19 @@ from lobstr_cli.display import print_json, print_table, print_detail_grouped, pr
 crawlers_app = typer.Typer(no_args_is_help=True)
 
 
+def _needs_account_label(c) -> str:
+    """"Needs Account" column value: the account type slug when the API gives
+    one, otherwise fall back to the plain `account` boolean. A crawler can be
+    account-backed (`account: true`) with no usable type slug (e.g. a bare
+    `{}` or a shape `Crawler.account_type` can't parse) — falling back to
+    "yes"/"no" here means that case still reads as needing an account, rather
+    than silently showing "no" the way `c.account_type or "no"` alone would.
+    """
+    if c.account_type:
+        return c.account_type
+    return "yes" if c.account else "no"
+
+
 @crawlers_app.command("ls")
 def list_crawlers():
     """List all available crawlers."""
@@ -33,7 +46,7 @@ def list_crawlers():
             c.id,
             "?" if c.credits_per_row is None else f"{c.credits_per_row:g}",
             str(c.max_concurrency),
-            "yes" if c.account else "no",
+            _needs_account_label(c),
             status,
         ])
     print_table(["Name", "Slug", "Hash", "Credits/Row", "Max Conc.", "Needs Account", "Status"], rows)
@@ -72,7 +85,7 @@ def show_crawler(crawler: str = typer.Argument(..., help="Crawler slug, hash, or
             ("Max Concurrency", data.max_concurrency),
         ]),
         ("Flags", [
-            ("Needs Account", "yes" if data.account else "no"),
+            ("Needs Account", _needs_account_label(data)),
             ("Email Verification", data.has_email_verification),
             ("Public", data.is_public),
             ("Premium", data.is_premium),
@@ -232,7 +245,7 @@ def search_crawlers(keyword: str = typer.Argument(..., help="Search keyword")):
             c.id,
             "?" if c.credits_per_row is None else f"{c.credits_per_row:g}",
             str(c.max_concurrency),
-            "yes" if c.account else "no",
+            _needs_account_label(c),
             status,
         ])
     print_table(["Name", "Slug", "Hash", "Credits/Row", "Max Conc.", "Needs Account", "Status"], rows)

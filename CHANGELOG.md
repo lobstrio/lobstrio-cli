@@ -5,6 +5,42 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.0] - 2026-09-15
+
+### Added
+
+- Link a connected platform account to a squid with `squid update --account`
+  and `go --account`, without detaching accounts already attached. Linking
+  is additive by default: pass an account and it's added to whatever the
+  squid already has. `squid update --replace-accounts` replaces the whole
+  list instead — including detaching every account when used with no
+  `--account` at all — and prints which accounts are being detached before
+  it does. Requires `lobstrio-sdk>=0.7.0`.
+- `go` picks the right account automatically for an account-backed crawler
+  (e.g. LinkedIn, Sales Navigator) when exactly one healthy, unlocked match
+  exists for that crawler's account type, and tells you what to pass when it
+  cannot: it names the candidates when there are several, or what type of
+  account to connect when there are none. It never auto-picks onto a squid
+  that already has an account attached — a reused squid (`go --name`) keeps
+  whatever it had.
+  This closes a gap where `go` on an account-backed crawler would create the
+  squid and start the run, and the run would fail immediately with no
+  account ever linked, even with a healthy matching account already
+  connected (visible in `lobstr accounts ls`).
+- `go` creates the squid and links the account in one command; a wrong-type
+  account, an unknown account, or `--account` on a crawler that doesn't use
+  one each fail with a message telling you what to do, before anything is
+  created. If linking fails after the squid is created — or the command is
+  interrupted (Ctrl-C) — before the run starts, the squid is deleted instead
+  of left behind.
+
+### Changed
+
+- `crawlers ls`, `show`, and `search` now show which account type a crawler
+  needs (e.g. `sales-nav-sync`) in the "Needs Account" column, instead of a
+  plain yes/no — use it to find a matching account for `--account`. `--json`
+  output is unaffected; it already returned the full crawler details.
+
 ## [0.6.1] - 2026-09-11
 
 ### Fixed

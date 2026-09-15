@@ -11,6 +11,7 @@ from lobstrio.models.crawler import Crawler, CrawlerParams
 from lobstrio.models.squid import Squid
 from lobstrio.models.task import Task, AddTasksResult
 from lobstrio.models.run import Run, RunStats
+from lobstrio.models.account import Account
 
 
 runner = CliRunner()
@@ -38,6 +39,11 @@ def _mock_client(squids_by_name=None):
     mock = MagicMock()
     mock.crawlers.list.return_value = CRAWLERS
     mock.crawlers.iter.return_value = CRAWLERS
+    # account_type defaults to None on CRAWLERS[0] (account=False) — must be
+    # configured explicitly, otherwise `client.crawlers.get(...)` returns an
+    # unconfigured MagicMock whose `.account_type` is truthy and would wrongly
+    # trigger the account auto-pick/attach path in every test using this fixture.
+    mock.crawlers.get.return_value = CRAWLERS[0]
     # Google Maps Leads Scraper has one optional squid-level param, e.g.
     # `language`; the `go` command must always fill it in (user value or
     # None) so a freshly created squid's update body is never empty.
@@ -205,6 +211,211 @@ class TestGoParams:
         assert result.exit_code == 0
 
 
+ACCOUNT_CRAWLER_HASH = "d" * 32
+
+ACCOUNT_CRAWLER = Crawler(
+    id=ACCOUNT_CRAWLER_HASH, name="Sales Nav Scraper", slug="sales-nav-scraper",
+    description=None, credits_per_row=1, credits_per_email=None,
+    max_concurrency=5, account=True, has_email_verification=False,
+    is_public=True, is_premium=False, is_available=True, has_issues=False,
+    rank=1, account_type="sales-nav-sync",
+)
+
+
+def _account(id, username, type="sales-nav-sync", status="200", resets_in=None,
+             squids=None, status_code_info="ok"):
+    return Account(
+        id=id, username=username, type=type, status_code_info=status_code_info,
+        status_code_description=None, baseurl=None, created_at=None,
+        updated_at=None, last_synchronization_time=None,
+        squids=squids or [], params={}, status=status, resets_in=resets_in,
+    )
+
+
+class TestGoAccountTypeMissing:
+    """`crawler.account` true but `crawler.account_type` falsy (the API/SDK
+    couldn't parse a usable slug) must fail loudly, not silently fall through
+    to the pre-fix "no account needed" path — that silent fallthrough is
+    exactly the bug in card #HuwPdi7D."""
+
+    def test_fails_before_creating_a_squid(self):
+        mock = _mock_client()
+        broken_crawler = Crawler(
+            id="crawler_broken", name="Broken Account Crawler", slug="broken-account-crawler",
+            description=None, credits_per_row=1, credits_per_email=None,
+            max_concurrency=5, account=True, has_email_verification=False,
+            is_public=True, is_premium=False, is_available=True, has_issues=False,
+            rank=1, account_type=None,
+        )
+        mock.crawlers.get.return_value = broken_crawler
+        with patch("lobstr_cli.cli.get_client", return_value=mock):
+            result = runner.invoke(app, ["go", "Google Maps", "https://a.com", "--no-download"])
+        assert result.exit_code != 0
+        assert "account" in result.output.lower()
+        mock.squids.create.assert_not_called()
+
+
+class TestGoAccounts:
+    """`go --account` / auto-pick for account-backed crawlers. Card #HuwPdi7D:
+    `go` on a crawler needing a synced account created a squid with no
+    accounts attached at all, and the run died silently as `no_accounts`."""
+
+    def _mock_with_account_crawler(self, accounts_on_create=None):
+        mock = _mock_client()
+        mock.crawlers.get.return_value = ACCOUNT_CRAWLER
+        mock.squids.create.return_value = Squid(
+            id="newsquid123", name="Test Squid", crawler=ACCOUNT_CRAWLER_HASH,
+            crawler_name="Sales Nav Scraper", is_active=True, is_ready=False,
+            concurrency=1, to_complete=None, last_run_status=None,
+            last_run_at=None, total_runs=0, export_unique_results=False,
+            params={}, accounts=accounts_on_create or [],
+        )
+        mock.squids.attach_accounts.return_value = None
+        return mock
+
+    def test_go_autopicks_single_healthy_account(self):
+        mock = self._mock_with_account_crawler()
+        mock.accounts.iter.return_value = [_account("ac1", "user1")]
+        with patch("lobstr_cli.cli.get_client", return_value=mock):
+            result = runner.invoke(app, [
+                "go", ACCOUNT_CRAWLER_HASH, "https://a.com", "--no-download",
+            ])
+        assert result.exit_code == 0, result.output
+        mock.squids.attach_accounts.assert_called_once_with("newsquid123", ["ac1"])
+        assert "Auto-picked account: user1" in result.output
+
+    def test_go_ignores_wrong_type_and_locked_accounts_when_autopicking(self):
+        mock = self._mock_with_account_crawler()
+        mock.accounts.iter.return_value = [
+            _account("ac_wrong_type", "linkedin-user", type="linkedin-sync"),
+            _account("ac_locked", "locked-user", resets_in=120),
+            _account("ac_bad_status", "unhealthy-user", status="429"),
+            _account("ac_expired_cookies", "expired-user", status_code_info="cookies_expired"),
+            _account("ac_good", "healthy-user"),
+        ]
+        with patch("lobstr_cli.cli.get_client", return_value=mock):
+            result = runner.invoke(app, [
+                "go", ACCOUNT_CRAWLER_HASH, "https://a.com", "--no-download",
+            ])
+        assert result.exit_code == 0, result.output
+        mock.squids.attach_accounts.assert_called_once_with("newsquid123", ["ac_good"])
+
+    def test_go_excludes_cookies_expired_account_from_autopick(self):
+        """A `status == "200"` account with expired cookies must not be
+        picked — status alone is not the worker's full condition (see
+        `resolve.healthy_account_candidates`)."""
+        mock = self._mock_with_account_crawler()
+        mock.accounts.iter.return_value = [
+            _account("ac_expired", "expired-user", status_code_info="cookies_expired"),
+        ]
+        with patch("lobstr_cli.cli.get_client", return_value=mock):
+            result = runner.invoke(app, [
+                "go", ACCOUNT_CRAWLER_HASH, "https://a.com", "--no-download",
+            ])
+        assert result.exit_code != 0
+        mock.squids.attach_accounts.assert_not_called()
+
+    def test_go_fails_with_no_healthy_candidates_and_cleans_up_squid(self):
+        mock = self._mock_with_account_crawler()
+        mock.accounts.iter.return_value = [
+            _account("ac_locked", "locked-user", resets_in=60),
+        ]
+        with patch("lobstr_cli.cli.get_client", return_value=mock):
+            result = runner.invoke(app, [
+                "go", ACCOUNT_CRAWLER_HASH, "https://a.com", "--no-download",
+            ])
+        assert result.exit_code != 0
+        assert "sales-nav-sync" in result.output
+        mock.squids.attach_accounts.assert_not_called()
+        # No orphaned squid left behind after the failure.
+        mock.squids.delete.assert_called_once_with("newsquid123")
+
+    def test_go_fails_with_multiple_candidates_listing_them_and_cleans_up_squid(self):
+        mock = self._mock_with_account_crawler()
+        mock.accounts.iter.return_value = [
+            _account("ac1", "user1"),
+            _account("ac2", "user2"),
+        ]
+        with patch("lobstr_cli.cli.get_client", return_value=mock):
+            result = runner.invoke(app, [
+                "go", ACCOUNT_CRAWLER_HASH, "https://a.com", "--no-download",
+            ])
+        assert result.exit_code != 0
+        assert "user1" in result.output and "user2" in result.output
+        assert "--account" in result.output
+        mock.squids.attach_accounts.assert_not_called()
+        mock.squids.delete.assert_called_once_with("newsquid123")
+
+    def test_go_explicit_account_skips_autopick(self):
+        mock = self._mock_with_account_crawler()
+        mock.accounts.iter.return_value = [
+            _account("ac1", "user1"),
+            _account("ac2", "user2"),
+        ]
+        with patch("lobstr_cli.cli.get_client", return_value=mock):
+            result = runner.invoke(app, [
+                "go", ACCOUNT_CRAWLER_HASH, "https://a.com", "--no-download",
+                "--account", "user2",
+            ])
+        assert result.exit_code == 0, result.output
+        mock.squids.attach_accounts.assert_called_once_with("newsquid123", ["ac2"])
+
+    def test_go_explicit_account_wrong_type_fails_before_creating_squid(self):
+        mock = self._mock_with_account_crawler()
+        mock.accounts.iter.return_value = [
+            _account("ac1", "linkedin-user", type="linkedin-sync"),
+        ]
+        with patch("lobstr_cli.cli.get_client", return_value=mock):
+            result = runner.invoke(app, [
+                "go", ACCOUNT_CRAWLER_HASH, "https://a.com", "--no-download",
+                "--account", "linkedin-user",
+            ])
+        assert result.exit_code != 0
+        assert "linkedin-sync" in result.output
+        assert "sales-nav-sync" in result.output
+        mock.squids.create.assert_not_called()
+
+    def test_go_never_autopicks_onto_a_squid_that_already_has_accounts(self):
+        existing = [
+            Squid(
+                id="existing123", name="MyScraper", crawler=ACCOUNT_CRAWLER_HASH,
+                crawler_name="Sales Nav Scraper", is_active=True, is_ready=True,
+                concurrency=1, to_complete=None, last_run_status=None,
+                last_run_at=None, total_runs=0, export_unique_results=False,
+                params={},
+            ),
+        ]
+        mock = self._mock_with_account_crawler()
+        mock.squids.list.return_value = existing
+        mock.squids.iter.return_value = existing
+        mock.squids.get.return_value = Squid(
+            id="existing123", name="MyScraper", crawler=ACCOUNT_CRAWLER_HASH,
+            crawler_name="Sales Nav Scraper", is_active=True, is_ready=True,
+            concurrency=1, to_complete=None, last_run_status=None,
+            last_run_at=None, total_runs=0, export_unique_results=False,
+            params={}, accounts=[{"id": "ac_existing", "status": "ok"}],
+        )
+        mock.accounts.iter.return_value = [_account("ac1", "user1")]
+        with patch("lobstr_cli.cli.get_client", return_value=mock):
+            result = runner.invoke(app, [
+                "go", ACCOUNT_CRAWLER_HASH, "https://a.com", "--no-download",
+                "--name", "MyScraper",
+            ])
+        assert result.exit_code == 0, result.output
+        mock.squids.attach_accounts.assert_not_called()
+        assert "already has" in result.output
+
+    def test_go_crawler_with_no_account_type_ignores_account_logic(self):
+        """Baseline: an account-less crawler (CRAWLERS[0]) never calls
+        attach_accounts, with or without --account (the latter is caught by
+        resolve_accounts_with_type_check before anything is created)."""
+        mock = _mock_client()
+        with patch("lobstr_cli.cli.get_client", return_value=mock):
+            result = runner.invoke(app, ["go", "Google Maps", "https://a.com", "--no-download"])
+        assert result.exit_code == 0, result.output
+        mock.squids.attach_accounts.assert_not_called()
+
+
 class TestGoCleanup:
     def test_cleanup_orphaned_squid_on_error(self):
         mock = _mock_client()
@@ -213,6 +424,32 @@ class TestGoCleanup:
             result = runner.invoke(app, ["go", "Google Maps", "https://a.com"])
         assert result.exit_code != 0
         mock.squids.delete.assert_called_once()
+
+    def test_cleanup_orphaned_squid_on_interrupt(self):
+        """Ctrl-C between squid creation and the run starting must not leave
+        an orphan any more than any other failure there does — same cleanup
+        rule as test_cleanup_orphaned_squid_on_error, just via
+        KeyboardInterrupt instead of an ordinary exception."""
+        mock = _mock_client()
+        mock.tasks.add.side_effect = KeyboardInterrupt()
+        with patch("lobstr_cli.cli.get_client", return_value=mock):
+            result = runner.invoke(app, ["go", "Google Maps", "https://a.com"])
+        assert result.exit_code == 0
+        mock.squids.delete.assert_called_once()
+        assert "Interrupted" in result.output
+        assert "Cleaned up" in result.output
+
+    def test_no_cleanup_on_interrupt_after_run_started(self):
+        """Once the run has started, an interrupt (e.g. during the download
+        poll loop) must not delete the squid — it's no longer an
+        orphan-in-progress, it's a live run."""
+        mock = _mock_client()
+        mock.runs.stats.side_effect = KeyboardInterrupt()
+        with patch("lobstr_cli.cli.get_client", return_value=mock):
+            result = runner.invoke(app, ["go", "Google Maps", "https://a.com"])
+        assert result.exit_code == 0
+        mock.squids.delete.assert_not_called()
+        assert "Run: run123" in result.output
 
 
 CRAWLER_HASH = "a" * 32
@@ -409,3 +646,175 @@ class TestGoSquidReadiness:
         self._assert_ready_before_run(calls)
         body = self._update_body(calls)
         assert body.get("params") == {"api_key": "secret"}, body
+
+
+ACCT_CRAWLER_HASH = "e" * 32
+ACCT_SQUID_HASH = "f" * 32
+ACCOUNT_HASH = "1" * 32
+
+
+def _fake_api_server_with_account(account_type="sales-nav-sync", accounts=None,
+                                   seed_accounts=None, reuse_name=None):
+    """Like `_fake_api_server`, extended to cover the account-attach path:
+    `GET /crawlers/{hash}` reports an account type, `GET /accounts` serves the
+    candidate list, and `POST/GET /squids/{hash}` track the `accounts` field —
+    end-to-end coverage of card #HuwPdi7D's `go` fix against a fake transport,
+    matching the SDK's own `attach_accounts()` contract (merge, not replace).
+
+    `seed_accounts` pre-populates the squid's `accounts` (real account hashes
+    already attached, standing in for a squid set up before this `go` call —
+    exercises the SDK's `attach_accounts()` merge through real code, not a
+    mocked call shape). `reuse_name` serves the squid from `GET /squids`
+    too, so `go --name` finds it via `_find_squid_by_name` instead of
+    creating a new one.
+    """
+    calls: list[tuple[str, str, bytes]] = []
+    state = {"is_ready": True if seed_accounts else False, "accounts": list(seed_accounts or [])}
+    accounts = accounts if accounts is not None else [
+        {"id": ACCOUNT_HASH, "username": "sales-nav-user", "type": account_type, "status": "200"},
+    ]
+
+    def _squid_json(name="go-squid"):
+        return {
+            "id": ACCT_SQUID_HASH, "name": name, "crawler": ACCT_CRAWLER_HASH,
+            "crawler_name": "Test Account Crawler",
+            "is_active": True, "is_ready": state["is_ready"], "concurrency": 1,
+            "params": {},
+            "accounts": [{"id": h, "status": "ok"} for h in state["accounts"]],
+        }
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        method, path = request.method, request.url.path
+        calls.append((method, path, request.content))
+
+        if method == "GET" and path == f"/v1/crawlers/{ACCT_CRAWLER_HASH}":
+            return httpx.Response(200, json={
+                "id": ACCT_CRAWLER_HASH, "name": "Test Account Crawler", "slug": "test-account-crawler",
+                "account": {"type": account_type, "baseurl": "", "cookies": [], "icon": ""},
+            })
+        if method == "GET" and path == f"/v1/crawlers/{ACCT_CRAWLER_HASH}/params":
+            return httpx.Response(200, json={
+                "squid": {}, "task": {"url": {"type": "string", "required": True}},
+            })
+        if method == "GET" and path == "/v1/accounts":
+            return httpx.Response(200, json={"data": accounts, "total_pages": 1})
+        if method == "GET" and path == "/v1/squids":
+            rows = [_squid_json(name=reuse_name)] if reuse_name else []
+            return httpx.Response(200, json={"data": rows, "total_pages": 1})
+        if method == "POST" and path == "/v1/squids":
+            return httpx.Response(200, json={
+                "id": ACCT_SQUID_HASH, "name": "go-squid", "crawler": ACCT_CRAWLER_HASH,
+                "crawler_name": "Test Account Crawler",
+                "is_active": True, "is_ready": state["is_ready"], "concurrency": 1,
+                "params": {}, "accounts": [],
+            })
+        if method == "POST" and path == f"/v1/squids/{ACCT_SQUID_HASH}":
+            body = _json.loads(request.content or b"{}")
+            if body.get("params") or body.get("name"):
+                state["is_ready"] = True
+            if "accounts" in body:
+                state["accounts"] = body["accounts"]
+            return httpx.Response(200, json={})
+        if method == "GET" and path == f"/v1/squids/{ACCT_SQUID_HASH}":
+            return httpx.Response(200, json=_squid_json(name=reuse_name or "go-squid"))
+        if method == "POST" and path == "/v1/tasks":
+            tasks = _json.loads(request.content)["tasks"]
+            return httpx.Response(200, json={
+                "tasks": [{"id": f"t{i}", "params": t} for i, t in enumerate(tasks)],
+                "duplicated_count": 0,
+            })
+        if method == "POST" and path == "/v1/runs":
+            if not state["is_ready"]:
+                return httpx.Response(400, json={"error": "SquidNotReady: squid is not ready"})
+            if not state["accounts"]:
+                # Mirrors the real worker's no_accounts done reason — should
+                # never be hit once `go` attaches an account correctly.
+                return httpx.Response(200, json={
+                    "id": "c" * 32, "status": "done", "total_results": 0,
+                    "total_unique_results": 0, "duration": 0, "credit_used": 0,
+                    "origin": "api", "export_done": False, "done_reason": "no_accounts",
+                })
+            return httpx.Response(200, json={
+                "id": "c" * 32, "status": "running", "total_results": 0,
+                "total_unique_results": 0, "duration": 0, "credit_used": 0,
+                "origin": "api", "export_done": False,
+            })
+        if method == "DELETE" and path == f"/v1/squids/{ACCT_SQUID_HASH}":
+            return httpx.Response(200, json={})
+
+        raise AssertionError(f"unexpected request: {method} {path}")
+
+    return handler, calls
+
+
+class TestGoAccountsEndToEnd:
+    """`go` on an account-backed crawler, against a fake transport standing in
+    for the real API contract (see docs/agents/api/squids.md): the squid must
+    end up with the account attached — `accounts` non-empty — before the run
+    starts, not the `no_accounts` failure from card #HuwPdi7D."""
+
+    def test_go_autopicks_and_attaches_before_run_starts(self):
+        handler, calls = _fake_api_server_with_account()
+        client = LobstrClient(token="t", transport=httpx.MockTransport(handler))
+        with patch("lobstr_cli.cli.get_client", return_value=client):
+            result = runner.invoke(app, [
+                "go", ACCT_CRAWLER_HASH, "https://example.com/thing", "--no-download",
+            ])
+
+        assert result.exit_code == 0, result.output
+
+        update_idx = next(
+            i for i, (m, p, _b) in enumerate(calls)
+            if m == "POST" and p == f"/v1/squids/{ACCT_SQUID_HASH}"
+            and ACCOUNT_HASH.encode() in (_b or b"")
+        )
+        run_idx = next(i for i, (m, p, _b) in enumerate(calls) if m == "POST" and p == "/v1/runs")
+        assert update_idx < run_idx, "account must be attached before the run starts"
+
+        run_call = next(b for m, p, b in calls if m == "POST" and p == "/v1/runs")
+        assert run_call is not None
+
+    def test_go_with_no_healthy_account_fails_and_cleans_up(self):
+        handler, calls = _fake_api_server_with_account(accounts=[])
+        client = LobstrClient(token="t", transport=httpx.MockTransport(handler))
+        with patch("lobstr_cli.cli.get_client", return_value=client):
+            result = runner.invoke(app, [
+                "go", ACCT_CRAWLER_HASH, "https://example.com/thing", "--no-download",
+            ])
+
+        assert result.exit_code != 0
+        assert any(m == "DELETE" and p == f"/v1/squids/{ACCT_SQUID_HASH}" for m, p, _b in calls), (
+            "a squid created but never made runnable must be cleaned up, not left orphaned"
+        )
+        assert not any(m == "POST" and p == "/v1/runs" for m, p, _b in calls), (
+            "must never start a run once account resolution fails"
+        )
+
+    def test_go_reused_squid_merges_explicit_account_with_existing_one(self):
+        """End-to-end regression for the merge itself: a squid seeded with one
+        real account already attached, reused by `--name`, given a second
+        account explicitly — the outgoing `POST /squids/{hash}` body must
+        carry both hashes, driven through the real SDK `attach_accounts()`
+        merge (GET current -> union -> POST), not a mocked call shape."""
+        existing_hash = "3" * 32
+        new_hash = "4" * 32
+        handler, calls = _fake_api_server_with_account(
+            accounts=[
+                {"id": new_hash, "username": "second-user", "type": "sales-nav-sync", "status": "200"},
+            ],
+            seed_accounts=[existing_hash],
+            reuse_name="MyReusedSquid",
+        )
+        client = LobstrClient(token="t", transport=httpx.MockTransport(handler))
+        with patch("lobstr_cli.cli.get_client", return_value=client):
+            result = runner.invoke(app, [
+                "go", ACCT_CRAWLER_HASH, "https://example.com/thing", "--no-download",
+                "--name", "MyReusedSquid", "--account", "second-user",
+            ])
+
+        assert result.exit_code == 0, result.output
+        update_body = next(
+            _json.loads(b) for m, p, b in calls
+            if m == "POST" and p == f"/v1/squids/{ACCT_SQUID_HASH}" and b"accounts" in (b or b"")
+        )
+        assert set(update_body["accounts"]) == {existing_hash, new_hash}, update_body

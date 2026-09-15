@@ -143,6 +143,89 @@ def resolve_account(client, identifier: str) -> str:
     return match_username(identifier, items, "account")
 
 
+def resolve_accounts_with_type_check(client, crawler: Any, identifiers: list[str]) -> list[str]:
+    """Resolve `--account` values to hashes and enforce the crawler's account
+    type before any of them reach the API.
+
+    The API answers a wrong-type account, an unknown hash, and someone else's
+    account with the *same* 404 (`AccountDoesNotExist`, rewritten to
+    `HTTPNotFound` — see docs/agents/api/squids.md), and a crawler that needs
+    no account with a generic `InvalidParam("accounts")`, 400. None of that is
+    something a user can act on. Checking the type client-side, against data
+    already fetched to resolve the identifier, turns both into a specific
+    message before the request is even sent.
+
+    Fetches the account list **once** and resolves every identifier against
+    that same snapshot (mirroring `resolve_account`'s own hash-prefix-then-
+    username logic, rather than calling it — calling it would re-fetch per
+    identifier, and a second listing that disagreed with the first, e.g. a
+    paginated result changing between calls, could return a hash the first
+    snapshot has no record of, silently skipping the type check below instead
+    of failing it). "Unknown hash"/"unknown username" is the same "No
+    account matching ..." error `resolve_account()` raises, from the same
+    `match_hash_prefix`/`match_username` helpers.
+
+    `identifiers` empty is always a no-op (returns `[]`), whether or not the
+    crawler needs an account — this is what lets `go` call this unconditionally
+    right after resolving the crawler, before creating anything.
+    """
+    if not identifiers:
+        return []
+    if not crawler.account_type:
+        print_error(
+            f"{crawler.name} does not use an account; drop --account "
+            f"(got: {', '.join(identifiers)})."
+        )
+        raise SystemExit(1)
+    items = list(client.accounts.iter())
+    by_id = {_attr(a, "id"): a for a in items}
+    hashes = []
+    for ident in identifiers:
+        if _is_hex(ident):
+            try:
+                account_hash = match_hash_prefix(ident.lower(), items)
+            except SystemExit:
+                account_hash = match_username(ident, items, "account")
+        else:
+            account_hash = match_username(ident, items, "account")
+        account = by_id[account_hash]
+        if _attr(account, "type") != crawler.account_type:
+            print_error(
+                f"Account '{_attr(account, 'username')}' is a {_attr(account, 'type')} "
+                f"account; {crawler.name} needs a {crawler.account_type} account. Run "
+                f"`lobstr accounts ls` to see what you have, or "
+                f"`lobstr accounts sync {crawler.account_type} ...` to connect one."
+            )
+            raise SystemExit(1)
+        hashes.append(account_hash)
+    return hashes
+
+
+def healthy_account_candidates(client, crawler: Any) -> list[Any]:
+    """Accounts eligible for auto-pick: exact `account_type` match, `status`
+    ``"200"``, **not** `status_code_info == "cookies_expired"`, and no live
+    lock (`resets_in` unset or `<= 0`) — the full condition
+    `matrix/worker/consumer.py` uses to accept an attached account, all four
+    of which must hold, not `status` alone. `lobstr-mcp`'s
+    `account_linking.is_healthy()` implements the same condition (from
+    `lock_time` rather than `resets_in` — the API's `resets_in` is that same
+    lock re-expressed as seconds remaining); the two clients must not drift
+    on this, since a candidate either client picks has to actually run.
+
+    Matching on `crawler.account_type` rather than the crawler's name is
+    deliberate: two LinkedIn crawlers can need two different account types
+    (`linkedin-sync` vs `sales-nav-sync`), and the wrong one attaches "fine"
+    client-side only to fail the run later.
+    """
+    return [
+        a for a in client.accounts.iter()
+        if a.type == crawler.account_type
+        and a.status == "200"
+        and (a.status_code_info or "") != "cookies_expired"
+        and not (a.resets_in and a.resets_in > 0)
+    ]
+
+
 def match_crawler_name(name: str, crawlers: list[Any]) -> str:
     return match_name(name, crawlers, "crawler")
 

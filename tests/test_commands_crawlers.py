@@ -3,6 +3,7 @@ from unittest.mock import patch, MagicMock
 from typer.testing import CliRunner
 
 from lobstr_cli.cli import app, _state
+from lobstr_cli.commands.crawlers import _needs_account_label
 from lobstrio.models.crawler import Crawler, CrawlerAttribute, CrawlerParams
 
 
@@ -77,6 +78,32 @@ class TestCrawlersLs:
         with patch("lobstr_cli.cli.get_client", return_value=mock):
             result = runner.invoke(app, ["crawlers", "ls"])
         assert result.exit_code == 0
+
+    def test_needs_account_column_shows_slug(self):
+        """The column must show the account type slug when the API gives
+        one — that's what a user copies into `--account`'s matching type."""
+        assert _needs_account_label(SAMPLE_CRAWLERS[0]) == "no"  # account=False
+        c = Crawler(
+            id="x", name="Sales Nav", slug="sales-nav", description=None,
+            credits_per_row=1, credits_per_email=None, max_concurrency=1,
+            account=True, has_email_verification=False, is_public=True,
+            is_premium=False, is_available=True, has_issues=False, rank=None,
+            account_type="sales-nav-sync",
+        )
+        assert _needs_account_label(c) == "sales-nav-sync"
+
+    def test_needs_account_column_falls_back_to_bool_without_a_slug(self):
+        """account=True with no parseable account_type (e.g. an API shape the
+        SDK can't read the slug out of) must still read as needing an
+        account — "no" would be actively wrong, not just less specific."""
+        c = Crawler(
+            id="x", name="Mystery Crawler", slug="mystery", description=None,
+            credits_per_row=1, credits_per_email=None, max_concurrency=1,
+            account=True, has_email_verification=False, is_public=True,
+            is_premium=False, is_available=True, has_issues=False, rank=None,
+            account_type=None,
+        )
+        assert _needs_account_label(c) == "yes"
 
 
 class TestCrawlersShow:
