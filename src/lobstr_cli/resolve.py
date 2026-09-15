@@ -143,6 +143,68 @@ def resolve_account(client, identifier: str) -> str:
     return match_username(identifier, items, "account")
 
 
+def resolve_accounts_with_type_check(client, crawler: Any, identifiers: list[str]) -> list[str]:
+    """Resolve `--account` values to hashes and enforce the crawler's account
+    type before any of them reach the API.
+
+    The API answers a wrong-type account, an unknown hash, and someone else's
+    account with the *same* 404 (`AccountDoesNotExist`, rewritten to
+    `HTTPNotFound` — see docs/agents/api/squids.md), and a crawler that needs
+    no account with a generic `InvalidParam("accounts")`, 400. None of that is
+    something a user can act on. Checking the type client-side, against data
+    already fetched to resolve the identifier, turns both into a specific
+    message before the request is even sent. "Unknown hash" is already
+    covered by `resolve_account()`'s own "No account matching ..." error,
+    reached here through the same call.
+
+    `identifiers` empty is always a no-op (returns `[]`), whether or not the
+    crawler needs an account — this is what lets `go` call this unconditionally
+    right after resolving the crawler, before creating anything.
+    """
+    if not identifiers:
+        return []
+    if not crawler.account_type:
+        print_error(
+            f"{crawler.name} does not use an account; drop --account "
+            f"(got: {', '.join(identifiers)})."
+        )
+        raise SystemExit(1)
+    items = list(client.accounts.iter())
+    by_id = {_attr(a, "id"): a for a in items}
+    hashes = []
+    for ident in identifiers:
+        account_hash = resolve_account(client, ident)
+        account = by_id.get(account_hash)
+        if account is not None and _attr(account, "type") != crawler.account_type:
+            print_error(
+                f"Account '{_attr(account, 'username')}' is a {_attr(account, 'type')} "
+                f"account; {crawler.name} needs a {crawler.account_type} account. Run "
+                f"`lobstr accounts ls` to see what you have, or "
+                f"`lobstr accounts sync {crawler.account_type} ...` to connect one."
+            )
+            raise SystemExit(1)
+        hashes.append(account_hash)
+    return hashes
+
+
+def healthy_account_candidates(client, crawler: Any) -> list[Any]:
+    """Accounts eligible for auto-pick: exact `account_type` match, `status`
+    ``"200"`` (the exact condition `matrix/worker/consumer.py` uses to accept
+    an attached account), and no live lock (`resets_in` unset or `<= 0`).
+
+    Matching on `crawler.account_type` rather than the crawler's name is
+    deliberate: two LinkedIn crawlers can need two different account types
+    (`linkedin-sync` vs `sales-nav-sync`), and the wrong one attaches "fine"
+    client-side only to fail the run later.
+    """
+    return [
+        a for a in client.accounts.iter()
+        if a.type == crawler.account_type
+        and a.status == "200"
+        and not (a.resets_in and a.resets_in > 0)
+    ]
+
+
 def match_crawler_name(name: str, crawlers: list[Any]) -> str:
     return match_name(name, crawlers, "crawler")
 

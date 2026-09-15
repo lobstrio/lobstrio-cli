@@ -43,6 +43,10 @@ def _mock_client():
     mock.squids.iter.return_value = SQUIDS
     mock.crawlers.list.return_value = CRAWLERS
     mock.crawlers.iter.return_value = CRAWLERS
+    # CRAWLERS[0].account_type is None (account=False) — set explicitly,
+    # otherwise client.crawlers.get(...) returns an unconfigured MagicMock
+    # whose .account_type is truthy and would misfire the --account checks.
+    mock.crawlers.get.return_value = CRAWLERS[0]
     return mock
 
 
@@ -212,6 +216,89 @@ class TestSquidUpdate:
         assert kwargs["no_line_breaks"] is True
         assert kwargs["cron_expression"] == "0 9 * * 1"
         assert kwargs["timezone"] == "Europe/Paris"
+
+
+class TestSquidUpdateAccounts:
+    """`squid update --account` — see docs/agents/api/squids.md: `accounts` on
+    `POST /squids/{id}` is full-replace, so attach_accounts() (merge by
+    default) must be used, never a raw update(accounts=...) with just the new
+    hash."""
+
+    def _mock_with_account_crawler(self, account_type="sales-nav-sync"):
+        mock = _mock_client()
+        mock.squids.get.return_value = Squid(
+            id="squid1abc123def456", name="My Squid", crawler="crawler1",
+            crawler_name="Google Maps", is_active=True, is_ready=True,
+            concurrency=3, to_complete=0, last_run_status="finished",
+            last_run_at="2025-01-01", total_runs=5, export_unique_results=True,
+            params={}, accounts=[],
+        )
+        mock.crawlers.get.return_value = Crawler(
+            id="crawler1", name="Sales Nav Scraper", slug="sales-nav-scraper",
+            description=None, credits_per_row=1, credits_per_email=None,
+            max_concurrency=5, account=True, has_email_verification=False,
+            is_public=True, is_premium=False, is_available=True,
+            has_issues=False, rank=1, account_type=account_type,
+        )
+        return mock
+
+    def test_update_with_account_merges_by_default(self):
+        from lobstrio.models.account import Account
+
+        mock = self._mock_with_account_crawler()
+        mock.accounts.iter.return_value = [
+            Account(
+                id="ac1", username="user@example.com", type="sales-nav-sync",
+                status_code_info="ok", status_code_description=None, baseurl=None,
+                created_at=None, updated_at=None, last_synchronization_time=None,
+                squids=[], params={}, status="200",
+            ),
+        ]
+        mock.squids.attach_accounts.return_value = SQUIDS[0]
+        with patch("lobstr_cli.cli.get_client", return_value=mock):
+            result = runner.invoke(app, ["squid", "update", "My Squid", "--account", "user@example.com"])
+        assert result.exit_code == 0, result.output
+        mock.squids.attach_accounts.assert_called_once_with(
+            "squid1abc123def456", ["ac1"], replace=False
+        )
+
+    def test_update_with_replace_accounts_flag(self):
+        mock = self._mock_with_account_crawler()
+        mock.squids.attach_accounts.return_value = SQUIDS[0]
+        with patch("lobstr_cli.cli.get_client", return_value=mock):
+            result = runner.invoke(app, ["squid", "update", "My Squid", "--replace-accounts"])
+        assert result.exit_code == 0, result.output
+        mock.squids.attach_accounts.assert_called_once_with(
+            "squid1abc123def456", [], replace=True
+        )
+
+    def test_update_account_wrong_type_fails_with_clear_message(self):
+        from lobstrio.models.account import Account
+
+        mock = self._mock_with_account_crawler(account_type="sales-nav-sync")
+        mock.accounts.iter.return_value = [
+            Account(
+                id="ac1", username="linkedin-user", type="linkedin-sync",
+                status_code_info="ok", status_code_description=None, baseurl=None,
+                created_at=None, updated_at=None, last_synchronization_time=None,
+                squids=[], params={}, status="200",
+            ),
+        ]
+        with patch("lobstr_cli.cli.get_client", return_value=mock):
+            result = runner.invoke(app, ["squid", "update", "My Squid", "--account", "linkedin-user"])
+        assert result.exit_code == 1
+        assert "linkedin-sync" in result.output
+        assert "sales-nav-sync" in result.output
+        mock.squids.attach_accounts.assert_not_called()
+
+    def test_update_account_when_crawler_needs_none_fails_with_clear_message(self):
+        mock = _mock_client()  # CRAWLERS[0] has account=False, account_type=None
+        mock.squids.get.return_value = SQUIDS[0]
+        with patch("lobstr_cli.cli.get_client", return_value=mock):
+            result = runner.invoke(app, ["squid", "update", "My Squid", "--account", "someone"])
+        assert result.exit_code == 1
+        assert "does not use an account" in result.output
+        mock.squids.attach_accounts.assert_not_called()
 
 
 class TestSquidEstimate:

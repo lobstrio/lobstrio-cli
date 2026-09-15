@@ -5,6 +5,53 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.0] - 2026-09-15
+
+### Added
+
+- `--account` on `squid update` and on `go`: link an account to a squid.
+  Requires `lobstrio-sdk>=0.7.0` (`squids.attach_accounts()`, `Squid.accounts`,
+  `Crawler.account_type`, `Account.status`/`resets_in`).
+
+  Fixes card #HuwPdi7D: `lobstr go sales-navigator-leads-scraper <url>`
+  created the squid and started the run, and the run died immediately with
+  done reason `no_accounts` — the only attach path, `accounts` on
+  `POST /squids/{hash}`, was reachable nowhere in the CLI, on `go`, on
+  `squid create`, or on `squid update`, even though the account was healthy
+  in `lobstr accounts ls`.
+
+  - `squid update --account <username-or-hash>` (repeatable) links account(s)
+    to an existing squid. The API's `accounts` field is **full-replace** —
+    posting it deletes every existing link first — so by default this is
+    **merged** into the squid's current accounts, never a silent detach.
+    `--replace-accounts` sends exactly the given `--account` list instead
+    (including none at all, to detach everything).
+  - `go --account <username-or-hash>` does the same for a freshly created or
+    reused squid, in the same command. When the crawler needs an account and
+    none was passed, `go` auto-picks: it looks for accounts of the crawler's
+    exact account type (not its name — two LinkedIn crawlers can need
+    different types, e.g. `linkedin-sync` vs `sales-nav-sync`) that are
+    healthy (`status == "200"`, the same condition the run worker checks) and
+    not currently locked by another run. Exactly one candidate is picked
+    automatically and echoed; zero or several fail with a message naming the
+    account type needed and, for several, listing the candidates and the
+    `--account` flag to pick one. **Never auto-picked onto a squid that
+    already has accounts attached** — a reused squid keeps whatever it had.
+  - `squid create` still cannot take `accounts` — the API doesn't accept the
+    field there (`docs/agents/api/squids.md`) — so `go` creates the squid
+    then attaches, as one step from the command line; a failure at any point
+    before the run starts (missing/ambiguous account, wrong type, etc.)
+    deletes the squid it just created instead of leaving an orphan, same as
+    the existing cleanup for a failed task/param step.
+  - A wrong-type account, an unknown account, and `--account` on a crawler
+    that doesn't use one each fail with a specific message before any request
+    that would touch the account is sent, instead of the API's generic 404
+    (`AccountDoesNotExist`, indistinguishable from "not found" or "not
+    yours") or 400 (`InvalidParam("accounts")`).
+  - `crawlers ls`/`show`/`search` now print the crawler's account type slug
+    (e.g. `sales-nav-sync`) instead of a plain yes/no in the "Needs Account"
+    column.
+
 ## [0.6.1] - 2026-09-11
 
 ### Fixed

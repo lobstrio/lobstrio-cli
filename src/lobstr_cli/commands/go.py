@@ -36,18 +36,37 @@ def go(
     name: Optional[str] = typer.Option(None, "--name", help="Custom squid name"),
     delete: bool = typer.Option(False, "--delete", help="Delete squid after completion"),
     empty: bool = typer.Option(False, "--empty", help="Empty old tasks before adding new ones (when reusing squid)"),
+    account: Optional[list[str]] = typer.Option(
+        None, "--account", "-a",
+        help="Account username or hash to link (repeatable), for crawlers that need one. "
+        "Auto-picked when the crawler needs an account, exactly one healthy account of the "
+        "right type exists, and the squid has none attached yet; otherwise required — you'll "
+        "get a list of candidates to choose from. Merged into whatever the squid already has, "
+        "never silently replaced; a squid that already has accounts is left alone unless you "
+        "pass --account explicitly.",
+    ),
 ):
     """Full workflow: create squid, add tasks, run, download."""
     from lobstr_cli.cli import get_client, _state
     client = get_client()
 
-    from lobstr_cli.resolve import resolve_crawler_id, parse_params
+    from lobstr_cli.resolve import (
+        resolve_crawler_id, parse_params, resolve_accounts_with_type_check,
+        healthy_account_candidates,
+    )
 
     # 1. Resolve crawler
     print_info("Resolving crawler...")
     crawler_id = resolve_crawler_id(client, crawler)
-    crawler_name = client.crawlers.get(crawler_id).name
+    crawler_obj = client.crawlers.get(crawler_id)
+    crawler_name = crawler_obj.name
     print_info(f"Using crawler: {crawler_name}")
+
+    # Validate any explicit --account against the crawler's account type before
+    # creating anything (a wrong-type or account-not-needed --account should
+    # never get as far as an orphaned squid). Empty when --account wasn't
+    # passed, whether or not the crawler needs an account.
+    account_hashes = resolve_accounts_with_type_check(client, crawler_obj, account or [])
 
     # 2. Gather inputs
     task_inputs = list(inputs) if inputs else []
@@ -101,6 +120,43 @@ def go(
             squid_id = squid_obj.id
             created_new_squid = True
             print_info(f"Squid: {squid_obj.name} ({squid_id[:12]})")
+
+        # 3.5 Link an account, for crawlers that need one. A squid that
+        # already has account(s) attached — a reused squid, typically — is
+        # never auto-picked into: that would silently add contention on an
+        # account the user deliberately set up elsewhere. attach_accounts()
+        # merges either way, so an explicit --account is always safe to send.
+        if crawler_obj.account_type:
+            current_accounts = (
+                squid_obj.accounts if created_new_squid else client.squids.get(squid_id).accounts
+            )
+            if not account_hashes and not current_accounts:
+                candidates = healthy_account_candidates(client, crawler_obj)
+                if len(candidates) == 1:
+                    picked = candidates[0]
+                    account_hashes = [picked.id]
+                    print_info(f"Auto-picked account: {picked.username} ({picked.id[:12]})")
+                elif len(candidates) == 0:
+                    print_error(
+                        f"{crawler_name} needs a {crawler_obj.account_type} account and none of "
+                        "yours is healthy and unlocked. Connect one with "
+                        f"`lobstr accounts sync {crawler_obj.account_type} ...`, or pass --account."
+                    )
+                    raise typer.Exit(1)
+                else:
+                    names = ", ".join(f"{a.username} ({a.id[:12]})" for a in candidates[:10])
+                    print_error(
+                        f"Multiple healthy {crawler_obj.account_type} accounts available: "
+                        f"{names}. Pick one with --account <username-or-hash>."
+                    )
+                    raise typer.Exit(1)
+            elif not account_hashes and current_accounts:
+                print_info(
+                    f"Squid already has {len(current_accounts)} account(s) attached; leaving as is."
+                )
+            if account_hashes:
+                client.squids.attach_accounts(squid_id, account_hashes)
+                print_info(f"Linked account(s): {', '.join(h[:12] for h in account_hashes)}")
 
         # 4. Update squid params if needed
         update_kwargs: dict = {}

@@ -15,7 +15,13 @@ def create_squid(
     crawler: str = typer.Argument(..., help="Crawler hash, prefix, or name"),
     name: Optional[str] = typer.Option(None, "--name", help="Custom squid name"),
 ):
-    """Create a new squid for a crawler."""
+    """Create a new squid for a crawler.
+
+    The API doesn't accept `accounts` at creation time — for a crawler that
+    needs a synced account (LinkedIn, Sales Navigator, ...), link one
+    afterwards with `squid update SQUID --account ...`, or use `lobstr go`,
+    which creates the squid and links an account in one command.
+    """
     from lobstr_cli.cli import get_client, _state
     client = get_client()
     from lobstr_cli.resolve import resolve_crawler_id
@@ -126,6 +132,17 @@ def update_squid(
     timezone: Optional[str] = typer.Option(
         None, "--timezone", help="Timezone for the cron schedule, e.g. Europe/Paris"
     ),
+    account: Optional[list[str]] = typer.Option(
+        None, "--account",
+        help="Account username or hash to link (repeatable). The API's `accounts` field is "
+        "full-replace, so by default this is MERGED into the squid's existing accounts, "
+        "never silently dropping one. Pass --replace-accounts to replace the whole list "
+        "instead (e.g. with no --account at all, to detach everything).",
+    ),
+    replace_accounts: bool = typer.Option(
+        False, "--replace-accounts",
+        help="Replace the squid's account list with --account instead of merging into it.",
+    ),
 ):
     """Update squid configuration."""
     from lobstr_cli.cli import get_client, _state
@@ -153,10 +170,19 @@ def update_squid(
         kwargs["cron_expression"] = cron
     if timezone is not None:
         kwargs["timezone"] = timezone
-    if not kwargs:
+    if not kwargs and not account and not replace_accounts:
         print_error("No options specified. Use --help to see available options.")
         raise typer.Exit(1)
-    result = client.squids.update(squid_id, **kwargs)
+
+    result = None
+    if account or replace_accounts:
+        from lobstr_cli.resolve import resolve_accounts_with_type_check
+        current_squid = client.squids.get(squid_id)
+        crawler = client.crawlers.get(current_squid.crawler)
+        account_hashes = resolve_accounts_with_type_check(client, crawler, account or [])
+        result = client.squids.attach_accounts(squid_id, account_hashes, replace=replace_accounts)
+    if kwargs:
+        result = client.squids.update(squid_id, **kwargs)
     if _state.get("json"):
         print_json(asdict(result))
         return

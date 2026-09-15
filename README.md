@@ -86,9 +86,21 @@ lobstr squid create google-maps-leads-scraper --name "My Scraper"
 lobstr squid ls                        # List your squids
 lobstr squid show SQUID                # Show details
 lobstr squid update SQUID --concurrency 5 --param max_results=200
+
+# Link an account (crawlers that need one, e.g. sales-navigator-leads-scraper).
+# Merged into whatever the squid already has by default — the API's `accounts`
+# field is full-replace, so a naive call would detach anything already linked:
+lobstr squid update SQUID --account jane@example.com
+# Replace the whole account list instead of merging (empty = detach all):
+lobstr squid update SQUID --replace-accounts --account jane@example.com
+
 lobstr squid empty SQUID               # Remove all tasks
 lobstr squid rm SQUID --force          # Delete squid
 ```
+
+`squid create` has no `--account` — the API doesn't accept `accounts` at
+creation, only on `squid update`. `lobstr go` on an account-backed crawler
+handles this for you (see below): create, then link, in one command.
 
 </details>
 
@@ -198,7 +210,21 @@ lobstr go google-maps-leads-scraper url1 --delete
 
 # Custom output file
 lobstr go google-maps-leads-scraper url1 -o my_leads.csv
+
+# Crawlers that need a synced account (e.g. LinkedIn, Sales Navigator):
+# auto-picks the one healthy account of the right type if there's exactly one
+lobstr go sales-navigator-leads-scraper "https://linkedin.com/..."
+
+# ...or name it explicitly (needed when you have more than one candidate)
+lobstr go sales-navigator-leads-scraper "https://linkedin.com/..." --account jane@example.com
 ```
+
+For an account-backed crawler, `go` links an account automatically: exactly
+one healthy account of the crawler's account type (not its name — two
+LinkedIn crawlers can need different types) is picked for you; zero or
+several fail with a message telling you what to do, and pass `--account` to
+pick one yourself. A reused squid (`--name`) that already has an account
+attached is left alone — `go` never auto-picks onto it.
 
 </details>
 

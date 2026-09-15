@@ -33,7 +33,7 @@ def list_crawlers():
             c.id,
             "?" if c.credits_per_row is None else f"{c.credits_per_row:g}",
             str(c.max_concurrency),
-            "yes" if c.account else "no",
+            c.account_type or "no",
             status,
         ])
     print_table(["Name", "Slug", "Hash", "Credits/Row", "Max Conc.", "Needs Account", "Status"], rows)
@@ -72,7 +72,7 @@ def show_crawler(crawler: str = typer.Argument(..., help="Crawler slug, hash, or
             ("Max Concurrency", data.max_concurrency),
         ]),
         ("Flags", [
-            ("Needs Account", "yes" if data.account else "no"),
+            ("Needs Account", data.account_type or "no"),
             ("Email Verification", data.has_email_verification),
             ("Public", data.is_public),
             ("Premium", data.is_premium),
@@ -232,7 +232,7 @@ def search_crawlers(keyword: str = typer.Argument(..., help="Search keyword")):
             c.id,
             "?" if c.credits_per_row is None else f"{c.credits_per_row:g}",
             str(c.max_concurrency),
-            "yes" if c.account else "no",
+            c.account_type or "no",
             status,
         ])
     print_table(["Name", "Slug", "Hash", "Credits/Row", "Max Conc.", "Needs Account", "Status"], rows)
