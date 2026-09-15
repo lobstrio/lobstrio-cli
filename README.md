@@ -76,6 +76,11 @@ lobstr crawlers params google-maps-leads-scraper     # Show crawler parameters
 lobstr crawlers attrs google-maps-leads-scraper      # Show result attributes
 ```
 
+`ls`, `show`, and `search` show which account type a crawler needs (e.g.
+`sales-nav-sync`) in the "Needs Account" column, instead of a plain yes/no —
+that's the value to pass `--account`'s matching account for. `--json` output
+is unaffected.
+
 </details>
 
 <details>
