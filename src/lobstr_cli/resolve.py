@@ -153,9 +153,17 @@ def resolve_accounts_with_type_check(client, crawler: Any, identifiers: list[str
     no account with a generic `InvalidParam("accounts")`, 400. None of that is
     something a user can act on. Checking the type client-side, against data
     already fetched to resolve the identifier, turns both into a specific
-    message before the request is even sent. "Unknown hash" is already
-    covered by `resolve_account()`'s own "No account matching ..." error,
-    reached here through the same call.
+    message before the request is even sent.
+
+    Fetches the account list **once** and resolves every identifier against
+    that same snapshot (mirroring `resolve_account`'s own hash-prefix-then-
+    username logic, rather than calling it — calling it would re-fetch per
+    identifier, and a second listing that disagreed with the first, e.g. a
+    paginated result changing between calls, could return a hash the first
+    snapshot has no record of, silently skipping the type check below instead
+    of failing it). "Unknown hash"/"unknown username" is the same "No
+    account matching ..." error `resolve_account()` raises, from the same
+    `match_hash_prefix`/`match_username` helpers.
 
     `identifiers` empty is always a no-op (returns `[]`), whether or not the
     crawler needs an account — this is what lets `go` call this unconditionally
@@ -173,9 +181,15 @@ def resolve_accounts_with_type_check(client, crawler: Any, identifiers: list[str
     by_id = {_attr(a, "id"): a for a in items}
     hashes = []
     for ident in identifiers:
-        account_hash = resolve_account(client, ident)
-        account = by_id.get(account_hash)
-        if account is not None and _attr(account, "type") != crawler.account_type:
+        if _is_hex(ident):
+            try:
+                account_hash = match_hash_prefix(ident.lower(), items)
+            except SystemExit:
+                account_hash = match_username(ident, items, "account")
+        else:
+            account_hash = match_username(ident, items, "account")
+        account = by_id[account_hash]
+        if _attr(account, "type") != crawler.account_type:
             print_error(
                 f"Account '{_attr(account, 'username')}' is a {_attr(account, 'type')} "
                 f"account; {crawler.name} needs a {crawler.account_type} account. Run "
@@ -189,8 +203,14 @@ def resolve_accounts_with_type_check(client, crawler: Any, identifiers: list[str
 
 def healthy_account_candidates(client, crawler: Any) -> list[Any]:
     """Accounts eligible for auto-pick: exact `account_type` match, `status`
-    ``"200"`` (the exact condition `matrix/worker/consumer.py` uses to accept
-    an attached account), and no live lock (`resets_in` unset or `<= 0`).
+    ``"200"``, **not** `status_code_info == "cookies_expired"`, and no live
+    lock (`resets_in` unset or `<= 0`) — the full condition
+    `matrix/worker/consumer.py` uses to accept an attached account, all four
+    of which must hold, not `status` alone. `lobstr-mcp`'s
+    `account_linking.is_healthy()` implements the same condition (from
+    `lock_time` rather than `resets_in` — the API's `resets_in` is that same
+    lock re-expressed as seconds remaining); the two clients must not drift
+    on this, since a candidate either client picks has to actually run.
 
     Matching on `crawler.account_type` rather than the crawler's name is
     deliberate: two LinkedIn crawlers can need two different account types
@@ -201,6 +221,7 @@ def healthy_account_candidates(client, crawler: Any) -> list[Any]:
         a for a in client.accounts.iter()
         if a.type == crawler.account_type
         and a.status == "200"
+        and (a.status_code_info or "") != "cookies_expired"
         and not (a.resets_in and a.resets_in > 0)
     ]
 

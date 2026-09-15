@@ -1,3 +1,5 @@
+from types import SimpleNamespace
+
 import pytest
 from unittest.mock import MagicMock
 from lobstr_cli.resolve import (
@@ -9,10 +11,13 @@ from lobstr_cli.resolve import (
     resolve_crawler,
     resolve_squid,
     resolve_account,
+    resolve_accounts_with_type_check,
+    healthy_account_candidates,
     parse_param_value,
     parse_params,
     require_full_hash,
 )
+from lobstrio.models.account import Account
 
 
 # --- match_hash_prefix ---
@@ -459,3 +464,112 @@ class TestResolvePaginates:
         ]
         assert resolve_account(mock, "second@x.com") == "bbb222"
         mock.accounts.list.assert_not_called()
+
+
+# --- resolve_accounts_with_type_check ---
+
+def _crawler(name="Sales Nav Scraper", account_type="sales-nav-sync"):
+    return SimpleNamespace(name=name, account_type=account_type)
+
+
+class TestResolveAccountsWithTypeCheck:
+    def test_empty_identifiers_is_a_noop_even_without_account_type(self):
+        client = MagicMock()
+        assert resolve_accounts_with_type_check(client, _crawler(account_type=None), []) == []
+        client.accounts.iter.assert_not_called()
+
+    def test_crawler_without_account_type_rejects_explicit_account(self):
+        client = MagicMock()
+        with pytest.raises(SystemExit):
+            resolve_accounts_with_type_check(client, _crawler(account_type=None), ["someone"])
+
+    def test_resolves_matching_type(self):
+        client = MagicMock()
+        client.accounts.iter.return_value = [
+            {"id": "ac1", "username": "jane", "type": "sales-nav-sync"},
+        ]
+        assert resolve_accounts_with_type_check(client, _crawler(), ["jane"]) == ["ac1"]
+
+    def test_wrong_type_fails_with_both_types_named(self):
+        client = MagicMock()
+        client.accounts.iter.return_value = [
+            {"id": "ac1", "username": "jane", "type": "linkedin-sync"},
+        ]
+        with pytest.raises(SystemExit):
+            resolve_accounts_with_type_check(client, _crawler(), ["jane"])
+
+    def test_unknown_account_fails_before_any_type_check(self):
+        client = MagicMock()
+        client.accounts.iter.return_value = [
+            {"id": "ac1", "username": "jane", "type": "sales-nav-sync"},
+        ]
+        with pytest.raises(SystemExit):
+            resolve_accounts_with_type_check(client, _crawler(), ["nobody"])
+
+    def test_fetches_the_account_list_exactly_once_for_several_identifiers(self):
+        """Regression: resolving used to call resolve_account() per identifier,
+        each doing its own client.accounts.iter() — a second listing that
+        disagreed with the first could return a hash absent from the first
+        snapshot, silently skipping the type check."""
+        client = MagicMock()
+        client.accounts.iter.return_value = [
+            {"id": "ac1", "username": "jane", "type": "sales-nav-sync"},
+            {"id": "ac2", "username": "john", "type": "sales-nav-sync"},
+        ]
+        result = resolve_accounts_with_type_check(client, _crawler(), ["jane", "john"])
+        assert result == ["ac1", "ac2"]
+        assert client.accounts.iter.call_count == 1
+
+    def test_type_check_is_never_skipped_for_a_resolved_hash(self):
+        """Every hash resolve_accounts_with_type_check returns comes from the
+        one snapshot it fetched, so the type check below can never see
+        `account is None` and silently let a wrong-type hash through."""
+        client = MagicMock()
+        client.accounts.iter.return_value = [
+            {"id": "ac1", "username": "jane", "type": "linkedin-sync"},
+        ]
+        with pytest.raises(SystemExit):
+            resolve_accounts_with_type_check(client, _crawler(), ["ac1"])
+
+
+# --- healthy_account_candidates ---
+
+def _acct(id, type="sales-nav-sync", status="200", status_code_info="ok", resets_in=None):
+    return Account(
+        id=id, username=f"user-{id}", type=type, status_code_info=status_code_info,
+        status_code_description=None, baseurl=None, created_at=None, updated_at=None,
+        last_synchronization_time=None, squids=[], params={},
+        status=status, resets_in=resets_in,
+    )
+
+
+class TestHealthyAccountCandidates:
+    def test_matches_the_worker_condition(self):
+        client = MagicMock()
+        client.accounts.iter.return_value = [_acct("ac1")]
+        assert [a.id for a in healthy_account_candidates(client, _crawler())] == ["ac1"]
+
+    def test_excludes_wrong_type(self):
+        client = MagicMock()
+        client.accounts.iter.return_value = [_acct("ac1", type="linkedin-sync")]
+        assert healthy_account_candidates(client, _crawler()) == []
+
+    def test_excludes_non_200_status(self):
+        client = MagicMock()
+        client.accounts.iter.return_value = [_acct("ac1", status="429")]
+        assert healthy_account_candidates(client, _crawler()) == []
+
+    def test_excludes_cookies_expired(self):
+        client = MagicMock()
+        client.accounts.iter.return_value = [_acct("ac1", status_code_info="cookies_expired")]
+        assert healthy_account_candidates(client, _crawler()) == []
+
+    def test_excludes_locked(self):
+        client = MagicMock()
+        client.accounts.iter.return_value = [_acct("ac1", resets_in=42)]
+        assert healthy_account_candidates(client, _crawler()) == []
+
+    def test_includes_account_with_expired_lock(self):
+        client = MagicMock()
+        client.accounts.iter.return_value = [_acct("ac1", resets_in=0)]
+        assert [a.id for a in healthy_account_candidates(client, _crawler())] == ["ac1"]

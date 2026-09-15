@@ -4,7 +4,9 @@ from dataclasses import asdict
 from typing import Optional
 import typer
 
-from lobstr_cli.display import print_json, print_table, print_detail, print_success, print_error
+from lobstr_cli.display import (
+    print_json, print_table, print_detail, print_success, print_error, print_warning,
+)
 from lobstr_cli.resolve import resolve_squid as _resolve_squid
 
 squid_app = typer.Typer(no_args_is_help=True)
@@ -180,6 +182,19 @@ def update_squid(
         current_squid = client.squids.get(squid_id)
         crawler = client.crawlers.get(current_squid.crawler)
         account_hashes = resolve_accounts_with_type_check(client, crawler, account or [])
+        if replace_accounts:
+            # The one destructive path in this command: --replace-accounts
+            # sends exactly `account_hashes`, so anything currently attached
+            # but not in that list is detached — including everything, when
+            # --account was omitted entirely. Name what's about to be lost
+            # before the call, not just report success afterwards.
+            existing_ids = [a["id"] for a in current_squid.accounts]
+            detached = [i for i in existing_ids if i not in account_hashes]
+            if detached:
+                print_warning(
+                    f"Detaching {len(detached)} account(s) from squid {squid_id[:12]}: "
+                    f"{', '.join(h[:12] for h in detached)}"
+                )
         result = client.squids.attach_accounts(squid_id, account_hashes, replace=replace_accounts)
     if kwargs:
         result = client.squids.update(squid_id, **kwargs)

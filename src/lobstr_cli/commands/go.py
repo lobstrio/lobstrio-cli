@@ -62,6 +62,22 @@ def go(
     crawler_name = crawler_obj.name
     print_info(f"Using crawler: {crawler_name}")
 
+    # A crawler that needs an account (`account: true`) but whose account
+    # type slug the API/SDK couldn't parse (`account_type` falsy) must fail
+    # loudly here, before anything is created. Silently falling through to
+    # "no account needed" is exactly the bug this feature fixes (card
+    # #HuwPdi7D): a squid would be created, made ready, and its run would die
+    # with `no_accounts` — quietly, with no chance for --account to help,
+    # since there is no type to validate a hash against.
+    if crawler_obj.account and not crawler_obj.account_type:
+        print_error(
+            f"{crawler_name} needs an account, but the API didn't return a usable "
+            "account type for it, so an account can't be matched or auto-picked "
+            "safely. This looks like a bug in the crawler or the API response — "
+            "please report it instead of running without an account."
+        )
+        raise typer.Exit(1)
+
     # Validate any explicit --account against the crawler's account type before
     # creating anything (a wrong-type or account-not-needed --account should
     # never get as far as an orphaned squid). Empty when --account wasn't
@@ -265,6 +281,18 @@ def go(
             print_info(f"Deleted squid {squid_id[:12]}")
 
     except KeyboardInterrupt:
+        # Same cleanup rule as the Exception branch below, and for the same
+        # reason: a squid `go` just created, with no run started yet, must
+        # not survive a failure to leave this command — Ctrl-C is a failure
+        # like any other from the squid's point of view, not a reason to
+        # special-case an orphan into existence.
+        if created_new_squid and squid_id and not run_id:
+            try:
+                client.squids.delete(squid_id)
+                print_info(f"Cleaned up squid {squid_id[:12]}")
+                squid_id = None
+            except Exception:
+                print_info(f"Squid {squid_id[:12]} may need manual cleanup")
         msg = "\nInterrupted."
         if squid_id:
             msg += f" Squid: {squid_id[:12]}"

@@ -40,9 +40,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `squid create` still cannot take `accounts` — the API doesn't accept the
     field there (`docs/agents/api/squids.md`) — so `go` creates the squid
     then attaches, as one step from the command line; a failure at any point
-    before the run starts (missing/ambiguous account, wrong type, etc.)
-    deletes the squid it just created instead of leaving an orphan, same as
-    the existing cleanup for a failed task/param step.
+    before the run starts (missing/ambiguous account, wrong type, etc.), or
+    an interrupt (Ctrl-C) in that same window, deletes the squid it just
+    created instead of leaving an orphan, same as the existing cleanup for a
+    failed task/param step.
   - A wrong-type account, an unknown account, and `--account` on a crawler
     that doesn't use one each fail with a specific message before any request
     that would touch the account is sent, instead of the API's generic 404

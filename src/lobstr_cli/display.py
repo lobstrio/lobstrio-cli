@@ -48,6 +48,14 @@ def print_info(message: str) -> None:
     err_console.print(f"[dim]{message}[/]")
 
 
+def print_warning(message: str) -> None:
+    """Like print_error, but for a non-fatal heads-up the user needs to see
+    before a destructive action — printed regardless of --quiet/--json, since
+    those modes suppress print_info and a warning about data loss must not be
+    silenced along with routine progress chatter."""
+    err_console.print(f"[bold yellow]Warning:[/] {message}")
+
+
 def print_table(columns: list[str], rows: list[list[str]], title: str | None = None) -> None:
     table = Table(title=title, show_lines=False)
     for col in columns:
