@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.1] - 2026-09-16
+
+### Fixed
+
+- `go` no longer hardcodes the task key `url`. It now defaults `--key` from
+  the crawler's own declared task params: the one param when it declares
+  exactly one (e.g. `department` for `1stdibs-iter-categories`, instead of
+  the `[400] Invalid param: url` it used to return after already creating
+  and deleting a squid for nothing), `url` when it declares several and
+  `url` is one of them, and `url` when it declares none. When it declares
+  several and none of them is `url`, `go` refuses to guess and names the
+  choices instead — pass one with `--key`. An explicit `--key` always wins
+  over the default.
+
 ## [0.7.0] - 2026-09-15
 
 ### Added

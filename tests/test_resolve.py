@@ -16,6 +16,7 @@ from lobstr_cli.resolve import (
     parse_param_value,
     parse_params,
     require_full_hash,
+    default_task_key,
 )
 from lobstrio.models.account import Account
 
@@ -573,3 +574,47 @@ class TestHealthyAccountCandidates:
         client = MagicMock()
         client.accounts.iter.return_value = [_acct("ac1", resets_in=0)]
         assert [a.id for a in healthy_account_candidates(client, _crawler())] == ["ac1"]
+
+
+# --- default_task_key (card #Oy4yNR7I) ---
+
+class TestDefaultTaskKey:
+    def test_single_declared_param(self):
+        # 1stdibs-iter-categories: one task param, `department`.
+        task_params = {"department": {"type": "string", "required": False}}
+        assert default_task_key("1stdibs Iter Categories", task_params) == "department"
+
+    def test_single_declared_param_ignores_bare_max_int(self):
+        # A crawler with `max_tasks` set carries `task["max"]` as a bare int,
+        # not a declared field; it must not count as a second param.
+        task_params = {"department": {"type": "string", "required": False}, "max": 1}
+        assert default_task_key("Some Crawler", task_params) == "department"
+
+    def test_no_declared_params_falls_back_to_url(self):
+        assert default_task_key("Christies PM Iter Auctions", {}) == "url"
+
+    def test_several_declared_params_keeps_url_when_present(self):
+        task_params = {
+            "url": {"type": "string", "required": True},
+            "department": {"type": "string", "required": False},
+        }
+        assert default_task_key("Artcurial Iter Results", task_params) == "url"
+
+    def test_several_declared_params_without_url_raises(self):
+        task_params = {
+            "asin": {"type": "string", "required": True},
+            "marketplace": {"type": "string", "required": False},
+        }
+        with pytest.raises(SystemExit):
+            default_task_key("Amazon Asin Collector", task_params)
+
+    def test_several_declared_params_without_url_names_the_choices(self, capsys):
+        task_params = {
+            "asin": {"type": "string", "required": True},
+            "marketplace": {"type": "string", "required": False},
+        }
+        with pytest.raises(SystemExit):
+            default_task_key("Amazon Asin Collector", task_params)
+        out = capsys.readouterr()
+        assert "asin" in (out.out + out.err)
+        assert "marketplace" in (out.out + out.err)

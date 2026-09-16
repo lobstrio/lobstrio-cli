@@ -226,6 +226,45 @@ def healthy_account_candidates(client, crawler: Any) -> list[Any]:
     ]
 
 
+def default_task_key(crawler_name: str, task_params: dict) -> str:
+    """Pick the task-input key `go` uses when `--key` wasn't passed.
+
+    `task_params` is `CrawlerParams.task_params` (`crawlers.params()`), keyed
+    by declared field name. Declared fields are dicts (`{"type":...,
+    "required":...}`); a crawler whose `lobstr.json` sets `max_tasks` also
+    carries a bare `"max"` int in this same dict (`matrix/tools/frame_builder/
+    build.py` ~l.694, `public_params["task"]["max"] = ex["max_tasks"]`) — that
+    is a per-run task-count limit, not a task input field, so it never counts
+    as a declared param here. Confirmed against real crawlers: `amazon-asin-
+    collector` (`asin`, `marketplace`, plus `max`) needs the `isinstance`
+    filter or `max` would be mistaken for a second candidate key.
+
+    - Exactly one declared field (e.g. `department` for `1stdibs-iter-
+      categories`): default to it.
+    - None declared (some category crawlers take no task-level input at all,
+      e.g. `christies-pm-iter-auctions`): keep the historical default, `url`,
+      so nothing changes for callers relying on it.
+    - Several declared: keep `url` when it is one of them (e.g. `artcurial-
+      iter-results`: `url`, `department`) — it is almost always the field the
+      caller means, and this keeps every crawler whose key genuinely is `url`
+      unaffected. Otherwise (e.g. `amazon-asin-collector`: `asin`,
+      `marketplace`, no `url`) refuse to guess: name the options and require
+      `--key`, the same way an ambiguous `--account` is refused rather than
+      picked for the caller (`resolve_accounts_with_type_check`,
+      `healthy_account_candidates` in this module).
+    """
+    fields = [k for k, v in task_params.items() if isinstance(v, dict)]
+    if not fields or len(fields) == 1:
+        return fields[0] if fields else "url"
+    if "url" in fields:
+        return "url"
+    print_error(
+        f"{crawler_name} declares several task params ({', '.join(sorted(fields))}) "
+        "and none of them is `url`. Pick one with --key <name>."
+    )
+    raise SystemExit(1)
+
+
 def match_crawler_name(name: str, crawlers: list[Any]) -> str:
     return match_name(name, crawlers, "crawler")
 

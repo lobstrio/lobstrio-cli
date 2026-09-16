@@ -28,7 +28,13 @@ def go(
     crawler: str = typer.Argument(..., help="Crawler name or hash"),
     inputs: Optional[list[str]] = typer.Argument(None, help="URLs or keywords for tasks"),
     file: Optional[Path] = typer.Option(None, "--file", "-f", help="File with inputs (one per line)"),
-    key: str = typer.Option("url", "--key", "-k", help="Task param name (url, keyword, etc.)"),
+    key: Optional[str] = typer.Option(
+        None, "--key", "-k",
+        help="Task param name (url, keyword, etc.). Defaults to the crawler's own "
+        "declared task param when it declares exactly one, or `url` when it "
+        "declares several including `url` or none at all; otherwise `go` "
+        "refuses to guess and lists the choices. An explicit --key always wins.",
+    ),
     param: Optional[list[str]] = typer.Option(None, "--param", "-p", help="KEY=VALUE, repeatable"),
     concurrency: Optional[int] = typer.Option(None, "--concurrency", "-c"),
     output: str = typer.Option("results.csv", "--output", "-o", help="Output file path"),
@@ -52,7 +58,7 @@ def go(
 
     from lobstr_cli.resolve import (
         resolve_crawler_id, parse_params, resolve_accounts_with_type_check,
-        healthy_account_candidates,
+        healthy_account_candidates, default_task_key,
     )
 
     # 1. Resolve crawler
@@ -102,6 +108,20 @@ def go(
     run_id = None
     created_new_squid = False
     squid_params_meta = None
+
+    # Default `--key` from the crawler's own declared task params, rather
+    # than hardcoding `url` (card #Oy4yNR7I): a crawler like
+    # `1stdibs-iter-categories` whose task input is `department` used to
+    # fail every time with `[400] Invalid param: url`, after already
+    # creating (and then deleting) a squid for nothing. Resolved once here,
+    # before anything is created, so an unresolvable case (several params,
+    # none of them `url`) fails loudly with no side effects — same principle
+    # as the squid-param and account checks below. An explicit `--key`
+    # always wins and skips this fetch entirely.
+    if key is None:
+        squid_params_meta = client.crawlers.params(crawler_id)
+        key = default_task_key(crawler_name, squid_params_meta.task_params)
+
     try:
         # 3. Find existing or create squid
         existing = _find_squid_by_name(client, name, crawler_id) if name else None
@@ -117,8 +137,10 @@ def go(
             # ParamsNeeded from the API (apiviews.py ~l.5608), so a missing
             # required value must fail here, before an orphaned squid is
             # created — not surface later as a confusing error from
-            # squids.update() or runs.start().
-            squid_params_meta = client.crawlers.params(crawler_id)
+            # squids.update() or runs.start(). Already fetched above when
+            # `--key` wasn't given; reuse it instead of asking the API twice.
+            if squid_params_meta is None:
+                squid_params_meta = client.crawlers.params(crawler_id)
             missing_required = sorted(
                 k for k, v in squid_params_meta.squid_params.items()
                 if k != "account" and isinstance(v, dict) and v.get("required")

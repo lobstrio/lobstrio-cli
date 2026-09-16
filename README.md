@@ -290,13 +290,19 @@ Go to [Dashboard → API](https://app.lobstr.io/dashboard/api) to find your toke
 <details>
 <summary><strong>How do I use keyword-based crawlers?</strong></summary>
 
-Some crawlers accept keywords instead of URLs. Use the `--key` flag:
+Some crawlers accept keywords, or a field other than `url`, instead of a URL.
+`go` defaults `--key` from the crawler's own declared task params: the one
+param when it declares exactly one, `url` when it declares several including
+`url`, and `url` when it declares none. When it declares several and none of
+them is `url`, `go` won't guess — it names the choices and asks you to pass
+one:
 
 ```bash
 lobstr go google-search-scraper "pizza delivery" --key keyword
 ```
 
-Use `lobstr crawlers params <crawler>` to see what parameters a crawler accepts.
+`--key` always overrides the default when you pass it. Use
+`lobstr crawlers params <crawler>` to see what parameters a crawler accepts.
 
 </details>
 

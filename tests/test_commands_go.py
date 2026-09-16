@@ -123,6 +123,117 @@ class TestGoKey:
         mock.tasks.add.assert_called_once_with(squid="newsquid123", tasks=[{"keyword": "pizza"}])
 
 
+class TestGoKeyDefault:
+    """Card #Oy4yNR7I: `go` used to hardcode the task key `url`, so a crawler
+    like `1stdibs-iter-categories` (task param `department`) failed every
+    time with `[400] Invalid param: url`, after already creating (and then
+    deleting) a squid for nothing. `--key` now defaults from the crawler's
+    own declared task params (`crawlers.params().task_params`, real examples
+    checked against `matrix/modules/*/lobstr.json`), and an explicit --key
+    still always wins."""
+
+    def test_single_declared_task_param_becomes_the_default(self):
+        # 1stdibs-iter-categories: one task param, `department`, not `url`.
+        mock = _mock_client()
+        mock.crawlers.params.return_value = CrawlerParams.from_api({
+            "squid": {},
+            "task": {"department": {"type": "string", "required": False}},
+        })
+        with patch("lobstr_cli.cli.get_client", return_value=mock):
+            result = runner.invoke(app, ["go", "Google Maps", "jewellery"])
+        assert result.exit_code == 0
+        mock.tasks.add.assert_called_once_with(squid="newsquid123", tasks=[{"department": "jewellery"}])
+
+    def test_a_bare_max_tasks_int_is_not_mistaken_for_a_second_param(self):
+        # A crawler with `max_tasks` set in lobstr.json carries a bare int
+        # under `task["max"]` (build.py ~l.694) alongside the one real field;
+        # that must not turn a single-param crawler into an "ambiguous, several
+        # declared" one.
+        mock = _mock_client()
+        mock.crawlers.params.return_value = CrawlerParams.from_api({
+            "squid": {},
+            "task": {"department": {"type": "string", "required": False}, "max": 1},
+        })
+        with patch("lobstr_cli.cli.get_client", return_value=mock):
+            result = runner.invoke(app, ["go", "Google Maps", "jewellery"])
+        assert result.exit_code == 0
+        mock.tasks.add.assert_called_once_with(squid="newsquid123", tasks=[{"department": "jewellery"}])
+
+    def test_several_declared_task_params_keep_url_when_present(self):
+        # artcurial-iter-results: `url` and `department` both declared.
+        mock = _mock_client()
+        mock.crawlers.params.return_value = CrawlerParams.from_api({
+            "squid": {},
+            "task": {
+                "url": {"type": "string", "required": True},
+                "department": {"type": "string", "required": False},
+            },
+        })
+        with patch("lobstr_cli.cli.get_client", return_value=mock):
+            result = runner.invoke(app, ["go", "Google Maps", "https://a.com"])
+        assert result.exit_code == 0
+        mock.tasks.add.assert_called_once_with(squid="newsquid123", tasks=[{"url": "https://a.com"}])
+
+    def test_several_declared_task_params_without_url_requires_explicit_key(self):
+        # amazon-asin-collector: `asin` and `marketplace`, no `url` — go must
+        # refuse to guess and name the choices, rather than create an orphan
+        # squid that a 400 on tasks.add would then have to clean up.
+        mock = _mock_client()
+        mock.crawlers.params.return_value = CrawlerParams.from_api({
+            "squid": {},
+            "task": {
+                "asin": {"type": "string", "required": True},
+                "marketplace": {"type": "string", "required": False},
+            },
+        })
+        with patch("lobstr_cli.cli.get_client", return_value=mock):
+            result = runner.invoke(app, ["go", "Google Maps", "B0EXAMPLE"])
+        assert result.exit_code != 0
+        assert "asin" in result.output and "marketplace" in result.output
+        mock.squids.create.assert_not_called()
+        mock.tasks.add.assert_not_called()
+
+    def test_no_declared_task_params_falls_back_to_url(self):
+        # christies-pm-iter-auctions and similar: no task-level param declared
+        # at all. Keeps the historical default so nothing changes for these.
+        mock = _mock_client()
+        mock.crawlers.params.return_value = CrawlerParams.from_api({
+            "squid": {"max_days": {"type": "integer", "required": False}},
+            "task": {},
+        })
+        with patch("lobstr_cli.cli.get_client", return_value=mock):
+            result = runner.invoke(app, ["go", "Google Maps", "https://a.com"])
+        assert result.exit_code == 0
+        mock.tasks.add.assert_called_once_with(squid="newsquid123", tasks=[{"url": "https://a.com"}])
+
+    def test_explicit_key_overrides_the_declared_default(self):
+        # The crawler's only declared task param is `department`, but the
+        # caller passed --key explicitly: the explicit value must win.
+        mock = _mock_client()
+        mock.crawlers.params.return_value = CrawlerParams.from_api({
+            "squid": {},
+            "task": {"department": {"type": "string", "required": False}},
+        })
+        with patch("lobstr_cli.cli.get_client", return_value=mock):
+            result = runner.invoke(app, ["go", "Google Maps", "custom-value", "--key", "custom_field"])
+        assert result.exit_code == 0
+        mock.tasks.add.assert_called_once_with(squid="newsquid123", tasks=[{"custom_field": "custom-value"}])
+
+    def test_params_fetched_once_for_a_freshly_created_squid(self):
+        # Defaulting the key and validating squid-level required params both
+        # need `crawlers.params()`; a newly created squid must not fetch it
+        # twice.
+        mock = _mock_client()
+        mock.crawlers.params.return_value = CrawlerParams.from_api({
+            "squid": {},
+            "task": {"department": {"type": "string", "required": False}},
+        })
+        with patch("lobstr_cli.cli.get_client", return_value=mock):
+            result = runner.invoke(app, ["go", "Google Maps", "jewellery"])
+        assert result.exit_code == 0
+        assert mock.crawlers.params.call_count == 1
+
+
 class TestGoFile:
     def test_file_input(self, tmp_path):
         f = tmp_path / "urls.txt"
