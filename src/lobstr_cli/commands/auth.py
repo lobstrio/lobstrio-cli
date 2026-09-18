@@ -77,5 +77,7 @@ def whoami():
         ("Staff", me.is_staff),
         ("Balance", f"{balance.available} credits"),
         ("Consumed", balance.consumed),
-        ("Slots Used", f"{balance.used_slots}/{balance.total_available_slots}"),
+        # Runs in flight against what the plan allows at once — not a count of
+        # squids, which are unlimited.
+        ("Slots In Use", f"{balance.used_slots}/{balance.total_available_slots}"),
     ])

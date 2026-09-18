@@ -122,7 +122,9 @@ def update_squid(
     unique_results: Optional[bool] = typer.Option(None, "--unique-results/--no-unique-results"),
     param: Optional[list[str]] = typer.Option(None, "--param", help="KEY=VALUE, repeatable"),
     active: Optional[bool] = typer.Option(
-        None, "--active/--inactive", help="Activate or deactivate the squid (frees its slot)"
+        None,
+        "--active/--inactive",
+        help="Activate or deactivate the squid (deactivating stops its run and schedule)",
     ),
     to_complete: Optional[int] = typer.Option(
         None, "--to-complete", help="Number of tasks queued to run"
