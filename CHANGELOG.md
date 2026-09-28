@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.2] - 2026-09-28
+
+### Added
+
+- `--function NAME` turns an add-on on (`NAME=false` turns it off), repeatable,
+  in `go` and `squid update`: `lobstr go youtube-channel-scraper <url> --function get_videos`.
+  Names are checked against the crawler's add-ons. Before, only the SDK could set them.
+
+### Fixed
+
+- `squid update --param/--function`, and `go` reusing a squid by `--name`, keep the
+  squid's saved params. The API replaces `params` as a whole, so sending only the
+  change dropped the rest (e.g. `[400] A required parameter language is missing`).
+
 ## [0.7.1] - 2026-09-16
 
 ### Fixed
