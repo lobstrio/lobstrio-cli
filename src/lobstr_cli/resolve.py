@@ -302,3 +302,15 @@ def parse_params(param_list: list[str]) -> dict:
         k, _, v = p.partition("=")
         params[k] = parse_param_value(v)
     return params
+
+
+def parse_functions(function_list: list[str], known: dict) -> dict:
+    """--function NAME turns an add-on on, NAME=false turns it off."""
+    functions = {}
+    for f in function_list:
+        name, sep, value = f.partition("=")
+        if name not in known:
+            print_error(f"Unknown function '{name}'. Available: {', '.join(known) or 'none'}")
+            raise SystemExit(1)
+        functions[name] = parse_param_value(value) if sep else True
+    return functions

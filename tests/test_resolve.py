@@ -15,6 +15,7 @@ from lobstr_cli.resolve import (
     healthy_account_candidates,
     parse_param_value,
     parse_params,
+    parse_functions,
     require_full_hash,
     default_task_key,
 )
@@ -355,6 +356,22 @@ class TestParseParams:
     def test_overwrite_duplicate_key(self):
         result = parse_params(["key=first", "key=second"])
         assert result == {"key": "second"}
+
+
+# --- parse_functions ---
+
+class TestParseFunctions:
+    KNOWN = {"get_videos": {}, "get_shorts": {}}
+
+    def test_name_turns_on(self):
+        assert parse_functions(["get_videos"], self.KNOWN) == {"get_videos": True}
+
+    def test_name_false_turns_off(self):
+        assert parse_functions(["get_videos", "get_shorts=false"], self.KNOWN) == {"get_videos": True, "get_shorts": False}
+
+    def test_unknown_name_exits(self):
+        with pytest.raises(SystemExit):
+            parse_functions(["get_reels"], self.KNOWN)
 
 
 # --- require_full_hash ---
