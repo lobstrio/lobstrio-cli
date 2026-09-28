@@ -121,6 +121,9 @@ def update_squid(
     notify: Optional[str] = typer.Option(None, "--notify", help="on_success|on_error|null"),
     unique_results: Optional[bool] = typer.Option(None, "--unique-results/--no-unique-results"),
     param: Optional[list[str]] = typer.Option(None, "--param", help="KEY=VALUE, repeatable"),
+    function: Optional[list[str]] = typer.Option(
+        None, "--function", help="Add-on to turn on (NAME) or off (NAME=false), repeatable"
+    ),
     active: Optional[bool] = typer.Option(
         None, "--active/--inactive", help="Activate or deactivate the squid (frees its slot)"
     ),
@@ -159,9 +162,11 @@ def update_squid(
         kwargs["run_notify"] = None if notify == "null" else notify
     if unique_results is not None:
         kwargs["export_unique_results"] = unique_results
-    if param:
-        from lobstr_cli.resolve import parse_params
-        kwargs["params"] = parse_params(param)
+    if param or function:
+        from lobstr_cli.resolve import parse_params, parse_functions, merge_params
+        saved = client.squids.get(squid_id)
+        functions = parse_functions(function, client.crawlers.params(saved.crawler).functions or {}) if function else {}
+        kwargs["params"] = merge_params(saved.params, parse_params(param) if param else {}, functions)
     if active is not None:
         kwargs["is_active"] = active
     if to_complete is not None:

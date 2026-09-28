@@ -36,6 +36,9 @@ def go(
         "refuses to guess and lists the choices. An explicit --key always wins.",
     ),
     param: Optional[list[str]] = typer.Option(None, "--param", "-p", help="KEY=VALUE, repeatable"),
+    function: Optional[list[str]] = typer.Option(
+        None, "--function", help="Add-on to turn on (NAME) or off (NAME=false), repeatable"
+    ),
     concurrency: Optional[int] = typer.Option(None, "--concurrency", "-c"),
     output: str = typer.Option("results.csv", "--output", "-o", help="Output file path"),
     no_download: bool = typer.Option(False, "--no-download", help="Start run without waiting"),
@@ -57,7 +60,7 @@ def go(
     client = get_client()
 
     from lobstr_cli.resolve import (
-        resolve_crawler_id, parse_params, resolve_accounts_with_type_check,
+        resolve_crawler_id, parse_params, parse_functions, merge_params, resolve_accounts_with_type_check,
         healthy_account_candidates, default_task_key,
     )
 
@@ -121,6 +124,11 @@ def go(
     if key is None:
         squid_params_meta = client.crawlers.params(crawler_id)
         key = default_task_key(crawler_name, squid_params_meta.task_params)
+
+    if function:
+        if squid_params_meta is None:
+            squid_params_meta = client.crawlers.params(crawler_id)
+        user_params["functions"] = parse_functions(function, squid_params_meta.functions or {})
 
     try:
         # 3. Find existing or create squid
@@ -228,7 +236,10 @@ def go(
             else:
                 update_kwargs["name"] = squid_obj.name
         elif user_params:
-            update_kwargs["params"] = user_params
+            flat = {k: v for k, v in user_params.items() if k != "functions"}
+            update_kwargs["params"] = merge_params(
+                client.squids.get(squid_id).params, flat, user_params.get("functions") or {}
+            )
 
         # A reused squid (found by --name) is already ready, so only touch
         # it when the user asked to change something.

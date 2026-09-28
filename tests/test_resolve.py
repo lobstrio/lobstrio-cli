@@ -15,6 +15,8 @@ from lobstr_cli.resolve import (
     healthy_account_candidates,
     parse_param_value,
     parse_params,
+    parse_functions,
+    merge_params,
     require_full_hash,
     default_task_key,
 )
@@ -355,6 +357,38 @@ class TestParseParams:
     def test_overwrite_duplicate_key(self):
         result = parse_params(["key=first", "key=second"])
         assert result == {"key": "second"}
+
+
+# --- parse_functions ---
+
+class TestParseFunctions:
+    KNOWN = {"get_videos": {}, "get_shorts": {}}
+
+    def test_name_turns_on(self):
+        assert parse_functions(["get_videos"], self.KNOWN) == {"get_videos": True}
+
+    def test_name_false_turns_off(self):
+        assert parse_functions(["get_videos", "get_shorts=false"], self.KNOWN) == {"get_videos": True, "get_shorts": False}
+
+    def test_unknown_name_exits(self):
+        with pytest.raises(SystemExit):
+            parse_functions(["get_reels"], self.KNOWN)
+
+
+# --- merge_params ---
+
+class TestMergeParams:
+    SAVED = {"language": "English", "max_results": 200, "functions": {"a": False, "b": True}}
+
+    def test_keeps_saved_and_applies_change(self):
+        merged = merge_params(self.SAVED, {"max_results": 5}, {})
+        assert merged == {"language": "English", "max_results": 5, "functions": {"a": False, "b": True}}
+
+    def test_functions_merge_with_saved(self):
+        assert merge_params(self.SAVED, {}, {"a": True})["functions"] == {"a": True, "b": True}
+
+    def test_no_saved_params(self):
+        assert merge_params(None, {"x": 1}, {"a": True}) == {"x": 1, "functions": {"a": True}}
 
 
 # --- require_full_hash ---

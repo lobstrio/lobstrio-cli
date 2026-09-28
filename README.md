@@ -92,6 +92,9 @@ lobstr squid ls                        # List your squids
 lobstr squid show SQUID                # Show details
 lobstr squid update SQUID --concurrency 5 --param max_results=200
 
+# Turn add-ons on or off (names from `lobstr crawlers params CRAWLER`)
+lobstr squid update SQUID --function get_videos --function get_shorts=false
+
 # Link an account (crawlers that need one, e.g. sales-navigator-leads-scraper).
 # Merged into whatever the squid already has by default — the API's `accounts`
 # field is full-replace, so a naive call would detach anything already linked:
@@ -197,6 +200,9 @@ lobstr go google-search-scraper "pizza delivery" --key keyword
 
 # With crawler parameters
 lobstr go google-maps-leads-scraper url1 --param max_results=200 --param language=English
+
+# With add-ons (extra credits)
+lobstr go youtube-channel-scraper "https://www.youtube.com/@YouTube" --function get_videos
 
 # Set concurrency
 lobstr go google-maps-leads-scraper url1 --concurrency 3

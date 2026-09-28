@@ -199,6 +199,27 @@ class TestSquidUpdate:
         call_kwargs = mock.squids.update.call_args
         assert call_kwargs[1]["params"]["max_results"] == 200
 
+    def test_update_with_functions(self):
+        mock = _mock_client()
+        mock.squids.update.return_value = SQUIDS[0]
+        mock.squids.get.return_value = SQUIDS[0]
+        mock.crawlers.params.return_value = MagicMock(functions={"get_videos": {}, "get_shorts": {}})
+        with patch("lobstr_cli.cli.get_client", return_value=mock):
+            result = runner.invoke(app, ["squid", "update", "My Squid", "--function", "get_videos", "--function", "get_shorts=false"])
+        assert result.exit_code == 0
+        params = mock.squids.update.call_args[1]["params"]
+        assert params["functions"] == {"get_videos": True, "get_shorts": False}
+        assert params["max_results"] == SQUIDS[0].params["max_results"]  # saved params kept
+
+    def test_update_unknown_function_error(self):
+        mock = _mock_client()
+        mock.squids.get.return_value = SQUIDS[0]
+        mock.crawlers.params.return_value = MagicMock(functions={"get_videos": {}})
+        with patch("lobstr_cli.cli.get_client", return_value=mock):
+            result = runner.invoke(app, ["squid", "update", "My Squid", "--function", "get_reels"])
+        assert result.exit_code == 1
+        mock.squids.update.assert_not_called()
+
     def test_update_no_options_error(self):
         mock = _mock_client()
         with patch("lobstr_cli.cli.get_client", return_value=mock):

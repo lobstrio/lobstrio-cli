@@ -302,3 +302,24 @@ def parse_params(param_list: list[str]) -> dict:
         k, _, v = p.partition("=")
         params[k] = parse_param_value(v)
     return params
+
+
+def merge_params(saved: dict | None, params: dict, functions: dict) -> dict:
+    """The API replaces a squid's params as a whole: send the saved ones with the change."""
+    saved = saved or {}
+    merged = {**saved, **params}
+    if functions:
+        merged["functions"] = {**(saved.get("functions") or {}), **functions}
+    return merged
+
+
+def parse_functions(function_list: list[str], known: dict) -> dict:
+    """--function NAME turns an add-on on, NAME=false turns it off."""
+    functions = {}
+    for f in function_list:
+        name, sep, value = f.partition("=")
+        if name not in known:
+            print_error(f"Unknown function '{name}'. Available: {', '.join(known) or 'none'}")
+            raise SystemExit(1)
+        functions[name] = parse_param_value(value) if sep else True
+    return functions
