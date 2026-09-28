@@ -60,7 +60,7 @@ def go(
     client = get_client()
 
     from lobstr_cli.resolve import (
-        resolve_crawler_id, parse_params, parse_functions, resolve_accounts_with_type_check,
+        resolve_crawler_id, parse_params, parse_functions, merge_params, resolve_accounts_with_type_check,
         healthy_account_candidates, default_task_key,
     )
 
@@ -236,7 +236,10 @@ def go(
             else:
                 update_kwargs["name"] = squid_obj.name
         elif user_params:
-            update_kwargs["params"] = user_params
+            flat = {k: v for k, v in user_params.items() if k != "functions"}
+            update_kwargs["params"] = merge_params(
+                client.squids.get(squid_id).params, flat, user_params.get("functions") or {}
+            )
 
         # A reused squid (found by --name) is already ready, so only touch
         # it when the user asked to change something.

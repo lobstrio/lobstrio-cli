@@ -207,7 +207,9 @@ class TestSquidUpdate:
         with patch("lobstr_cli.cli.get_client", return_value=mock):
             result = runner.invoke(app, ["squid", "update", "My Squid", "--function", "get_videos", "--function", "get_shorts=false"])
         assert result.exit_code == 0
-        assert mock.squids.update.call_args[1]["params"] == {"functions": {"get_videos": True, "get_shorts": False}}
+        params = mock.squids.update.call_args[1]["params"]
+        assert params["functions"] == {"get_videos": True, "get_shorts": False}
+        assert params["max_results"] == SQUIDS[0].params["max_results"]  # saved params kept
 
     def test_update_unknown_function_error(self):
         mock = _mock_client()

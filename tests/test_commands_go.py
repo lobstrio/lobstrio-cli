@@ -304,6 +304,28 @@ class TestGoReuse:
         # Should NOT have created a new squid
         mock.squids.create.assert_not_called()
 
+    def test_reuse_merges_saved_params(self):
+        saved = Squid(
+            id="existing123", name="MyScraper", crawler="crawler1abc",
+            crawler_name="Google Maps", is_active=True, is_ready=True,
+            concurrency=1, to_complete=None, last_run_status=None,
+            last_run_at=None, total_runs=0, export_unique_results=False,
+            params={"language": "English", "functions": {"a": False, "b": True}},
+        )
+        mock = _mock_client(squids_by_name=[saved])
+        mock.squids.get.return_value = saved
+        mock.crawlers.params.return_value = CrawlerParams.from_api({
+            "squid": {"language": {"type": "string"}, "functions": {"a": {}, "b": {}}},
+            "task": {"url": {"type": "string", "required": True}},
+        })
+        with patch("lobstr_cli.cli.get_client", return_value=mock):
+            result = runner.invoke(app, ["go", "Google Maps", "https://a.com", "--name", "MyScraper",
+                                         "--param", "max_results=5", "--function", "a"])
+        assert result.exit_code == 0
+        assert mock.squids.update.call_args[1]["params"] == {
+            "language": "English", "max_results": 5, "functions": {"a": True, "b": True},
+        }
+
     def test_reuse_with_empty(self):
         existing = [
             Squid(

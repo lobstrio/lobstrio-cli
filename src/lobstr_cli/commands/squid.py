@@ -162,13 +162,11 @@ def update_squid(
         kwargs["run_notify"] = None if notify == "null" else notify
     if unique_results is not None:
         kwargs["export_unique_results"] = unique_results
-    if param:
-        from lobstr_cli.resolve import parse_params
-        kwargs["params"] = parse_params(param)
-    if function:
-        from lobstr_cli.resolve import parse_functions
-        known = client.crawlers.params(client.squids.get(squid_id).crawler).functions or {}
-        kwargs.setdefault("params", {})["functions"] = parse_functions(function, known)
+    if param or function:
+        from lobstr_cli.resolve import parse_params, parse_functions, merge_params
+        saved = client.squids.get(squid_id)
+        functions = parse_functions(function, client.crawlers.params(saved.crawler).functions or {}) if function else {}
+        kwargs["params"] = merge_params(saved.params, parse_params(param) if param else {}, functions)
     if active is not None:
         kwargs["is_active"] = active
     if to_complete is not None:
