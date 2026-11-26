@@ -1,3 +1,6 @@
+> [!WARNING]
+> **Archived on 26 November 2026.** This CLI speaks to the API v1 (squids, tasks, runs) and gets no more updates. To keep it, pin it: `pip install "lobstrio<1"`, since from 1.0 the `lobstrio` package becomes the SDK for the [API v2](https://docs.lobstr.io): one call per operation, JSON back in seconds, built for agents.
+
 <p align="center">
   <img src="https://raw.githubusercontent.com/lobstrio/lobstrio-cli/main/.github/logo.svg" alt="Lobstr.io" width="80"><br>
   <strong>lobstrio</strong><br>
